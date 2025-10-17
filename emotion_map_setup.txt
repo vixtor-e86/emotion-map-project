@@ -1,0 +1,689 @@
+# Real-Time AI Emotion Map - Setup Guide (Tasks 1 & 2)
+
+## Prerequisites
+- Python 3.10 or higher
+- UV package manager ([Install UV](https://github.com/astral-sh/uv))
+- Git (optional but recommended)
+
+---
+
+## TASK 1: Project Setup
+
+### Step 1: Install UV (if not already installed)
+
+**On macOS/Linux:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**On Windows:**
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+### Step 2: Create Project Structure
+
+```bash
+# Create main project directory
+mkdir emotion-map
+cd emotion-map
+
+# Initialize UV project
+uv init
+
+# Create directory structure
+mkdir -p backend/{data_collection,processing,database,scheduler,routes}
+mkdir -p frontend/{static/{css,js,images},templates}
+mkdir -p tests
+
+# Create empty Python files
+touch backend/__init__.py
+touch backend/app.py
+touch backend/config.py
+touch backend/data_collection/__init__.py
+touch backend/data_collection/{news_collector.py,reddit_collector.py,rss_collector.py}
+touch backend/processing/__init__.py
+touch backend/processing/{sentiment_analyzer.py,location_extractor.py,aggregator.py}
+touch backend/database/__init__.py
+touch backend/database/db_manager.py
+touch backend/scheduler/__init__.py
+touch backend/scheduler/background_tasks.py
+touch backend/routes/__init__.py
+touch backend/routes/api_routes.py
+
+# Create frontend files
+touch frontend/static/css/style.css
+touch frontend/static/js/{map.js,dashboard.js,api.js}
+touch frontend/templates/index.html
+
+# Create test files
+touch tests/{test_api.py,test_collectors.py,test_processing.py}
+
+# Create environment and documentation files
+touch .env
+touch .env.example
+touch .gitignore
+touch README.md
+```
+
+### Step 3: Set Up Virtual Environment with UV
+
+```bash
+# Create virtual environment
+uv venv
+
+# Activate virtual environment
+# On macOS/Linux:
+source .venv/bin/activate
+
+# On Windows:
+.venv\Scripts\activate
+```
+
+### Step 4: Install Backend Dependencies
+
+```bash
+# Install all dependencies at once
+uv pip install Flask==3.0.0 \
+    Flask-CORS==4.0.0 \
+    pandas==2.1.4 \
+    vaderSentiment==3.3.2 \
+    spacy==3.7.2 \
+    praw==7.7.1 \
+    feedparser==6.0.10 \
+    APScheduler==3.10.4 \
+    python-dotenv==1.0.0 \
+    requests==2.31.0
+
+# Download spaCy language model
+python -m spacy download en_core_web_sm
+
+# Generate requirements.txt
+uv pip freeze > requirements.txt
+```
+
+### Step 5: Create .env File
+
+Create a `.env` file in the root directory:
+
+```bash
+# .env
+FLASK_ENV=development
+FLASK_DEBUG=True
+SECRET_KEY=your-secret-key-here-change-in-production
+
+# Database
+DATABASE_PATH=emotion_map.db
+
+# API Keys (get these from respective services)
+NEWS_API_KEY=your_news_api_key_here
+REDDIT_CLIENT_ID=your_reddit_client_id
+REDDIT_CLIENT_SECRET=your_reddit_client_secret
+REDDIT_USER_AGENT=EmotionMapBot/1.0
+
+# Scheduler Settings
+UPDATE_INTERVAL_MINUTES=5
+```
+
+### Step 6: Create .env.example
+
+```bash
+# .env.example (for team members)
+FLASK_ENV=development
+FLASK_DEBUG=True
+SECRET_KEY=
+
+DATABASE_PATH=emotion_map.db
+
+NEWS_API_KEY=
+REDDIT_CLIENT_ID=
+REDDIT_CLIENT_SECRET=
+REDDIT_USER_AGENT=EmotionMapBot/1.0
+
+UPDATE_INTERVAL_MINUTES=5
+```
+
+### Step 7: Create .gitignore
+
+```
+# .gitignore
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.env
+*.db
+*.sqlite
+*.sqlite3
+.DS_Store
+.idea/
+.vscode/
+*.log
+node_modules/
+```
+
+### Step 8: Initialize SQLite Database
+
+Create `backend/database/init_db.py`:
+
+```python
+# backend/database/init_db.py
+import sqlite3
+import os
+from pathlib import Path
+
+def initialize_database(db_path='emotion_map.db'):
+    """Initialize the SQLite database with required tables."""
+    
+    # Create database directory if it doesn't exist
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Create raw_posts table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS raw_posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT NOT NULL,
+            source TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            city TEXT,
+            country TEXT,
+            continent TEXT,
+            sentiment TEXT,
+            sentiment_score REAL
+        )
+    ''')
+    
+    # Create aggregated_sentiment table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS aggregated_sentiment (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            location_name TEXT NOT NULL,
+            location_type TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            positive_count INTEGER DEFAULT 0,
+            negative_count INTEGER DEFAULT 0,
+            neutral_count INTEGER DEFAULT 0,
+            total_posts INTEGER DEFAULT 0,
+            dominant_sentiment TEXT,
+            avg_sentiment_score REAL
+        )
+    ''')
+    
+    # Create indexes for better query performance
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_raw_posts_timestamp 
+        ON raw_posts(timestamp)
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_raw_posts_country 
+        ON raw_posts(country)
+    ''')
+    
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_aggregated_location 
+        ON aggregated_sentiment(location_name, location_type)
+    ''')
+    
+    conn.commit()
+    conn.close()
+    
+    print(f"✅ Database initialized successfully at {db_path}")
+
+if __name__ == '__main__':
+    initialize_database()
+```
+
+Run the initialization:
+
+```bash
+python backend/database/init_db.py
+```
+
+---
+
+## TASK 2: Flask API Foundation
+
+### Step 1: Create Configuration File
+
+```python
+# backend/config.py
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class Config:
+    """Application configuration."""
+    
+    # Flask
+    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    DEBUG = os.getenv('FLASK_DEBUG', 'True') == 'True'
+    
+    # Database
+    DATABASE_PATH = os.getenv('DATABASE_PATH', 'emotion_map.db')
+    
+    # API Keys
+    NEWS_API_KEY = os.getenv('NEWS_API_KEY', '')
+    REDDIT_CLIENT_ID = os.getenv('REDDIT_CLIENT_ID', '')
+    REDDIT_CLIENT_SECRET = os.getenv('REDDIT_CLIENT_SECRET', '')
+    REDDIT_USER_AGENT = os.getenv('REDDIT_USER_AGENT', 'EmotionMapBot/1.0')
+    
+    # Scheduler
+    UPDATE_INTERVAL_MINUTES = int(os.getenv('UPDATE_INTERVAL_MINUTES', 5))
+    
+    # CORS
+    CORS_ORIGINS = ['http://localhost:5000', 'http://127.0.0.1:5000']
+```
+
+### Step 2: Create Database Manager
+
+```python
+# backend/database/db_manager.py
+import sqlite3
+from datetime import datetime, timedelta
+from typing import List, Dict, Optional
+from backend.config import Config
+
+class DatabaseManager:
+    """Handles all database operations."""
+    
+    def __init__(self, db_path: str = None):
+        self.db_path = db_path or Config.DATABASE_PATH
+    
+    def get_connection(self):
+        """Get database connection."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+    
+    def insert_raw_post(self, text: str, source: str, city: str = None, 
+                       country: str = None, continent: str = None,
+                       sentiment: str = None, sentiment_score: float = None):
+        """Insert a raw post into the database."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO raw_posts 
+            (text, source, city, country, continent, sentiment, sentiment_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (text, source, city, country, continent, sentiment, sentiment_score))
+        
+        conn.commit()
+        post_id = cursor.lastrowid
+        conn.close()
+        
+        return post_id
+    
+    def insert_aggregated_data(self, location_name: str, location_type: str,
+                              positive_count: int, negative_count: int,
+                              neutral_count: int, dominant_sentiment: str,
+                              avg_sentiment_score: float):
+        """Insert aggregated sentiment data."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        total_posts = positive_count + negative_count + neutral_count
+        
+        cursor.execute('''
+            INSERT INTO aggregated_sentiment 
+            (location_name, location_type, positive_count, negative_count,
+             neutral_count, total_posts, dominant_sentiment, avg_sentiment_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (location_name, location_type, positive_count, negative_count,
+              neutral_count, total_posts, dominant_sentiment, avg_sentiment_score))
+        
+        conn.commit()
+        conn.close()
+    
+    def get_map_data(self, zoom_level: str = 'country', hours: int = 24) -> List[Dict]:
+        """Get aggregated data for map visualization."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        time_threshold = datetime.now() - timedelta(hours=hours)
+        
+        cursor.execute('''
+            SELECT 
+                location_name,
+                location_type,
+                positive_count,
+                negative_count,
+                neutral_count,
+                total_posts,
+                dominant_sentiment,
+                avg_sentiment_score,
+                timestamp
+            FROM aggregated_sentiment
+            WHERE location_type = ? AND timestamp > ?
+            ORDER BY timestamp DESC
+        ''', (zoom_level, time_threshold))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        return [dict(row) for row in rows]
+    
+    def get_location_details(self, location_name: str) -> Optional[Dict]:
+        """Get detailed information for a specific location."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT *
+            FROM aggregated_sentiment
+            WHERE location_name = ?
+            ORDER BY timestamp DESC
+            LIMIT 1
+        ''', (location_name,))
+        
+        row = cursor.fetchone()
+        
+        if row:
+            # Get sample posts
+            cursor.execute('''
+                SELECT text, sentiment, sentiment_score, timestamp
+                FROM raw_posts
+                WHERE country = ? OR city = ?
+                ORDER BY timestamp DESC
+                LIMIT 5
+            ''', (location_name, location_name))
+            
+            sample_posts = [dict(post) for post in cursor.fetchall()]
+            
+            result = dict(row)
+            result['sample_posts'] = sample_posts
+            
+            conn.close()
+            return result
+        
+        conn.close()
+        return None
+    
+    def get_global_stats(self) -> Dict:
+        """Get global statistics."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT 
+                COUNT(*) as total_posts,
+                AVG(sentiment_score) as avg_sentiment
+            FROM raw_posts
+            WHERE timestamp > datetime('now', '-24 hours')
+        ''')
+        
+        stats = dict(cursor.fetchone())
+        
+        cursor.execute('''
+            SELECT COUNT(DISTINCT location_name) as countries_tracked
+            FROM aggregated_sentiment
+            WHERE location_type = 'country'
+        ''')
+        
+        stats.update(dict(cursor.fetchone()))
+        
+        conn.close()
+        return stats
+    
+    def cleanup_old_data(self, days: int = 7):
+        """Remove data older than specified days."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        threshold = datetime.now() - timedelta(days=days)
+        
+        cursor.execute('DELETE FROM raw_posts WHERE timestamp < ?', (threshold,))
+        cursor.execute('DELETE FROM aggregated_sentiment WHERE timestamp < ?', (threshold,))
+        
+        conn.commit()
+        deleted_count = cursor.rowcount
+        conn.close()
+        
+        return deleted_count
+
+# Initialize global instance
+db = DatabaseManager()
+```
+
+### Step 3: Create API Routes
+
+```python
+# backend/routes/api_routes.py
+from flask import Blueprint, jsonify, request
+from backend.database.db_manager import db
+from datetime import datetime
+
+api_bp = Blueprint('api', __name__, url_prefix='/api')
+
+@api_bp.route('/health', methods=['GET'])
+def health_check():
+    """Health check endpoint."""
+    return jsonify({
+        'status': 'ok',
+        'timestamp': datetime.now().isoformat()
+    })
+
+@api_bp.route('/map-data/<zoom_level>', methods=['GET'])
+def get_map_data(zoom_level):
+    """Get map data for specified zoom level."""
+    valid_zoom_levels = ['continent', 'country', 'city']
+    
+    if zoom_level not in valid_zoom_levels:
+        return jsonify({'error': f'Invalid zoom level. Must be one of: {valid_zoom_levels}'}), 400
+    
+    try:
+        hours = request.args.get('hours', default=24, type=int)
+        data = db.get_map_data(zoom_level, hours)
+        
+        # Format data for Plotly
+        response = {
+            'locations': [item['location_name'] for item in data],
+            'sentiment_scores': [item['avg_sentiment_score'] for item in data],
+            'hover_text': [
+                f"{item['location_name']}: {item['dominant_sentiment']} "
+                f"({item['total_posts']} posts)"
+                for item in data
+            ],
+            'post_counts': [item['total_posts'] for item in data],
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        return jsonify(response)
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/location/<location_name>', methods=['GET'])
+def get_location_details(location_name):
+    """Get detailed information for a specific location."""
+    try:
+        details = db.get_location_details(location_name)
+        
+        if details:
+            return jsonify(details)
+        else:
+            return jsonify({'error': 'Location not found'}), 404
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/stats', methods=['GET'])
+def get_stats():
+    """Get global statistics."""
+    try:
+        stats = db.get_global_stats()
+        stats['last_updated'] = datetime.now().isoformat()
+        
+        return jsonify(stats)
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@api_bp.route('/trends', methods=['GET'])
+def get_trends():
+    """Get sentiment trends over time."""
+    try:
+        hours = request.args.get('hours', default=24, type=int)
+        
+        # TODO: Implement time-series aggregation
+        # For now, return placeholder data
+        response = {
+            'timestamps': [],
+            'sentiment_scores': [],
+            'post_counts': [],
+            'message': 'Trends endpoint - implementation pending'
+        }
+        
+        return jsonify(response)
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+```
+
+### Step 4: Create Main Flask Application
+
+```python
+# backend/app.py
+from flask import Flask, render_template
+from flask_cors import CORS
+from backend.config import Config
+from backend.routes.api_routes import api_bp
+
+def create_app(config_class=Config):
+    """Application factory pattern."""
+    app = Flask(__name__, 
+                template_folder='../frontend/templates',
+                static_folder='../frontend/static')
+    
+    app.config.from_object(config_class)
+    
+    # Initialize CORS
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    
+    # Register blueprints
+    app.register_blueprint(api_bp)
+    
+    # Main route
+    @app.route('/')
+    def index():
+        return render_template('index.html')
+    
+    return app
+
+if __name__ == '__main__':
+    app = create_app()
+    app.run(debug=True, port=5000, host='0.0.0.0')
+```
+
+### Step 5: Run the Application
+
+```bash
+# Make sure you're in the project root and virtual environment is activated
+python backend/app.py
+```
+
+### Step 6: Test the API Endpoints
+
+**Using curl:**
+
+```bash
+# Test health check
+curl http://localhost:5000/api/health
+
+# Test map data
+curl http://localhost:5000/api/map-data/country
+
+# Test stats
+curl http://localhost:5000/api/stats
+```
+
+**Using Python requests:**
+
+```python
+import requests
+
+# Health check
+response = requests.get('http://localhost:5000/api/health')
+print(response.json())
+
+# Map data
+response = requests.get('http://localhost:5000/api/map-data/country')
+print(response.json())
+
+# Stats
+response = requests.get('http://localhost:5000/api/stats')
+print(response.json())
+```
+
+---
+
+## Verification Checklist
+
+### Backend Setup ✅
+- [ ] UV installed and working
+- [ ] Virtual environment created
+- [ ] All dependencies installed
+- [ ] Database initialized successfully
+- [ ] `.env` file configured
+- [ ] Flask app runs without errors
+
+### API Endpoints ✅
+- [ ] `/api/health` returns 200 OK
+- [ ] `/api/map-data/<zoom_level>` endpoint accessible
+- [ ] `/api/location/<location_name>` endpoint accessible
+- [ ] `/api/stats` endpoint accessible
+- [ ] `/api/trends` endpoint accessible
+- [ ] CORS configured properly
+
+---
+
+## Next Steps
+
+1. **Team members working on APIs**: Have them test these endpoints and provide feedback
+2. **Frontend setup**: Proceed with HTML, CSS, and JavaScript structure
+3. **Data collection**: Start implementing the collector modules
+4. **Testing**: Set up unit tests for each module
+
+---
+
+## Troubleshooting
+
+### UV not found
+```bash
+# Reinstall UV
+curl -LsSf https://astral.sh/uv/install.sh | sh
+# Add to PATH (check UV documentation)
+```
+
+### Database errors
+```bash
+# Reinitialize database
+rm emotion_map.db
+python backend/database/init_db.py
+```
+
+### Port already in use
+```bash
+# Change port in app.py or kill process
+lsof -ti:5000 | xargs kill -9  # macOS/Linux
+```
+
+### Import errors
+```bash
+# Ensure you're in project root
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+```
+
+---
+
+**You're now ready to start development! 🚀**
