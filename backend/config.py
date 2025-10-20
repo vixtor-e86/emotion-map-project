@@ -14,7 +14,7 @@ class Config:
     DATABASE_PATH = os.getenv('DATABASE_PATH', 'emotion_map.db')
     
     # API Keys
-    NEWS_API_KEY = os.getenv('NEWS_API_KEY', '')
+    NEWSDATA_API_KEY = os.getenv('NEWS_API_KEY', '')
     REDDIT_CLIENT_ID = os.getenv('REDDIT_CLIENT_ID', '')
     REDDIT_CLIENT_SECRET = os.getenv('REDDIT_CLIENT_SECRET', '')
     REDDIT_USER_AGENT = os.getenv('REDDIT_USER_AGENT', 'EmotionMapBot/1.0')
