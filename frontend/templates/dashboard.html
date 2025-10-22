@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion Map - Real-Time Global Emotions</title>
+    
+    <!-- Globe.gl Library -->
+    <script src="https://unpkg.com/globe.gl"></script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loader"></div>
+        <div class="loading-text">Initializing Emotion Map...</div>
+    </div>
+
+    <!-- Top Bar -->
+    <div class="top-bar">
+        <div class="logo-section">
+            <div class="logo"></div>
+            <div class="brand-name">Emotion Map</div>
+        </div>
+
+        <div class="emotion-stats" id="emotionStats">
+            <!-- Populated by dashboard.js -->
+        </div>
+
+        <div class="status-section">
+            <button class="refresh-btn" id="refreshBtn" title="Refresh data">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+                </svg>
+            </button>
+            <div class="live-indicator">
+                <div class="live-dot"></div>
+                <div>
+                    <div style="font-size: 0.75rem; font-weight: 600;">LIVE</div>
+                    <div class="time-display" id="timeDisplay">--:--</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Globe Container -->
+    <div id="globe-container"></div>
+
+    <!-- Bottom Bar -->
+    <div class="bottom-bar">
+        <div class="bottom-content">
+            <div class="search-container">
+                <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <input 
+                    type="text" 
+                    class="search-input" 
+                    id="searchInput" 
+                    placeholder="Search location, topic, or event..."
+                >
+            </div>
+
+            <div class="filters-container">
+                <span class="filter-label">Filter:</span>
+                <button class="filter-btn" data-emotion="joy">
+                    <span>😊</span>
+                    <span>Joy</span>
+                </button>
+                <button class="filter-btn" data-emotion="anger">
+                    <span>😠</span>
+                    <span>Anger</span>
+                </button>
+                <button class="filter-btn" data-emotion="sadness">
+                    <span>😢</span>
+                    <span>Sadness</span>
+                </button>
+                <button class="filter-btn" data-emotion="hope">
+                    <span>🟢</span>
+                    <span>Hope</span>
+                </button>
+                <button class="filter-btn" data-emotion="calmness">
+                    <span>😌</span>
+                    <span>Calm</span>
+                </button>
+            </div>
+
+            <div class="hint-text">Drag to rotate • Scroll to zoom</div>
+        </div>
+    </div>
+
+    <!-- Region Details Drawer -->
+    <div class="region-drawer" id="regionDrawer">
+        <div class="drawer-header">
+            <div>
+                <div class="drawer-title" id="drawerTitle">Nigeria</div>
+                <div class="drawer-subtitle" id="drawerSubtitle">Lagos</div>
+            </div>
+            <button class="close-btn" id="closeDrawer">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+
+        <div class="drawer-section">
+            <div class="section-title">Emotion Breakdown</div>
+            <div class="emotion-breakdown" id="emotionBreakdown">
+                <!-- Populated by dashboard.js -->
+            </div>
+        </div>
+
+        <div class="drawer-section">
+            <div class="section-title">Trending Topics</div>
+            <div class="keywords-container" id="keywordsContainer">
+                <!-- Populated by dashboard.js -->
+            </div>
+        </div>
+
+        <div class="drawer-section">
+            <div class="section-title">Recent Voices</div>
+            <div class="posts-container" id="postsContainer">
+                <!-- Populated by dashboard.js -->
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Files -->
+    <script src="{{ url_for('static', filename='js/api.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/globe3d.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

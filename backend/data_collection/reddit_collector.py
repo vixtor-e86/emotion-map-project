@@ -61,7 +61,8 @@ def create_reddit_instance():
     )
     return reddit
 
-def collect_reddit_data(limit_per_sub=10, retries=2):
+def collect_reddit_data(limit_per_sub=20, retries=2):
+
     """
     Collect data from Reddit and save to database.
     Returns: Number of posts collected
@@ -128,5 +129,5 @@ def collect_reddit_data(limit_per_sub=10, retries=2):
 # Test the collector
 if __name__ == "__main__":
     print("🚀 Starting Reddit Collector Test...")
-    count = collect_reddit_data(limit_per_sub=5)  # Reduced for testing
+    count = collect_reddit_data(limit_per_sub=20)
     print(f"✅ Test Complete: {count} posts collected")

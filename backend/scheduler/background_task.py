@@ -17,7 +17,8 @@ import os
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from data_collection.rss_collector import collect_rss_data
-
+from data_collection.news_collector import collect_news_data
+from data_collection.reddit_collector import collect_reddit_data
 # Set up logging
 logging.basicConfig(
     filename="data_collection.log",
@@ -35,8 +36,13 @@ def run_data_collection():
         logging.info("Starting data collection pipeline...")
         start_time = datetime.now()
         
-        # Collect RSS data
-        post_count = collect_rss_data()
+        # Collect data
+        RSS =  collect_rss_data()
+        News = collect_news_data()
+        Reddit = collect_reddit_data(limit_per_sub=20)
+        # Twitter to be implemented here
+        post_count = RSS + News + Reddit
+        
         
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
