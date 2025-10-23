@@ -21,6 +21,9 @@ class Config:
     
     # Scheduler
     UPDATE_INTERVAL_MINUTES = int(os.getenv('UPDATE_INTERVAL_MINUTES', 5))
-    
+
+    # Twitter API
+    # TWITTER_BEARER_TOKEN = os.getenv('TWITTER_BEARER_TOKEN', '')
+
     # CORS
     CORS_ORIGINS = ['http://localhost:5000', 'http://127.0.0.1:5000']

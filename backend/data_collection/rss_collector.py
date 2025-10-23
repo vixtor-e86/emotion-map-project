@@ -27,7 +27,7 @@ RSS_FEEDS = {
     "Infobae": "https://www.infobae.com/america/rss.xml",
     "The Times of India": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
     "ABC Australia": "https://www.abc.net.au/news/feed/51120/rss.xml",
-    "CBC Canada": "https://www.cbc.ca/cmlink/rss-world",
+    # "CBC Canada": "https://www.cbc.ca/cmlink/rss-world",
     "Sky News": "https://feeds.skynews.com/feeds/rss/world.xml",
     "New York Times": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
     "The Independent (UK)": "https://www.independent.co.uk/news/world/rss",
@@ -100,8 +100,8 @@ def collect_rss_data():
                     text=text,
                     source=f"RSS-{source}",
                     country=country,
-                    sentiment=None,  # Will be analyzed later
-                    sentiment_score=None
+                    emotion=None,  # ✅ NEW PARAMETER - will be analyzed later
+                    emotion_score=None  # ✅ NEW PARAMETER - will be analyzed later
                 )
                 
                 total_posts += 1

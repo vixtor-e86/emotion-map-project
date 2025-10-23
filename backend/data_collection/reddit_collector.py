@@ -89,8 +89,8 @@ def collect_reddit_data(limit_per_sub=20, retries=2):
                             text=post.title,
                             source=f"Reddit-r/{sub}",
                             country=country,
-                            sentiment=None,  # Will be analyzed later
-                            sentiment_score=None
+                            emotion=None,  # ✅ NEW PARAMETER - will be analyzed later
+                            emotion_score=None  # ✅ NEW PARAMETER - will be analyzed later
                         )
                         
                         total_posts += 1

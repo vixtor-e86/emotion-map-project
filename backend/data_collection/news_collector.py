@@ -86,8 +86,8 @@ def collect_news_data():
                                 text=text,
                                 source=f"NewsAPI-{country_name}",
                                 country=country_name,
-                                sentiment=None,
-                                sentiment_score=None
+                                emotion=None,  # ✅ NEW PARAMETER - will be analyzed later
+                                emotion_score=None  # ✅ NEW PARAMETER - will be analyzed later
                             )
                             
                             total_posts += 1
