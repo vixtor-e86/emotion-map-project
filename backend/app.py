@@ -51,7 +51,6 @@ if __name__ == '__main__':
     
     # # Register shutdown handler
     # atexit.register(shutdown_scheduler)
-    
     # print("\n>>> Background scheduler is running!")
     # print(">>> Collecting data every 60 minutes from:")
     # print("    - RSS Feeds")
@@ -61,7 +60,7 @@ if __name__ == '__main__':
     
     # # Run Flask app
     # try:
-    #     app.run(debug=True, port=5000, host='0.0.0.0')
+    #     app.run(debug=True, port=5000, host='0.0.0.0'
     # except KeyboardInterrupt:
     #     print("\n>>> Server stopped by user")
     #     shutdown_scheduler()
