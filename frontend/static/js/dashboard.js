@@ -67,15 +67,21 @@ function updateGlobalStats(stats) {
     
     container.innerHTML = '';
     
-    Object.entries(stats).forEach(([emotion, value]) => {
+    // Ensure we have valid numbers
+    const emotions = ['joy', 'anger', 'sadness', 'hope', 'calmness'];
+    
+    emotions.forEach(emotion => {
         const config = window.EmotionMapAPI.EMOTION_CONFIG[emotion];
         if (!config) return;
+        
+        // Get value, default to 0 if not present
+        const value = stats[emotion] || 0;
         
         const statDiv = document.createElement('div');
         statDiv.className = 'emotion-stat';
         statDiv.innerHTML = `
             <span class="emotion-icon">${config.emoji}</span>
-            <span class="emotion-value">${value}%</span>
+            <span class="emotion-value">${Math.round(value)}%</span>
         `;
         container.appendChild(statDiv);
     });
@@ -277,25 +283,87 @@ async function handleRefresh() {
 }
 
 /**
- * Handle search input
+ * Handle search input with autocomplete
  */
 function handleSearch(e) {
     clearTimeout(searchTimeout);
     
     const query = e.target.value.trim();
+    const suggestionsContainer = document.getElementById('searchSuggestions');
     
-    if (query.length < 3) return;
+    if (query.length < 2) {
+        if (suggestionsContainer) suggestionsContainer.style.display = 'none';
+        return;
+    }
+    
+    // Show suggestions as user types
+    const suggestions = currentMapData
+        .filter(country => country.country.toLowerCase().includes(query.toLowerCase()))
+        .slice(0, 5); // Show max 5 suggestions
+    
+    if (suggestionsContainer && suggestions.length > 0) {
+        const EMOTION_CONFIG = window.EmotionMapAPI.EMOTION_CONFIG;
+        suggestionsContainer.innerHTML = suggestions.map(country => {
+            const config = EMOTION_CONFIG[country.emotion];
+            return `
+                <div class="search-suggestion" data-lat="${country.lat}" data-lng="${country.lng}" data-country="${country.country}">
+                    <span style="font-size: 1.2rem; margin-right: 0.5rem;">${config ? config.emoji : '🌍'}</span>
+                    <span style="flex: 1;">${country.country}</span>
+                    <span style="font-size: 0.8rem; color: #666;">${country.posts} posts</span>
+                </div>
+            `;
+        }).join('');
+        suggestionsContainer.style.display = 'block';
+        
+        // Add click handlers to suggestions
+        document.querySelectorAll('.search-suggestion').forEach(item => {
+            item.addEventListener('click', () => {
+                const lat = parseFloat(item.dataset.lat);
+                const lng = parseFloat(item.dataset.lng);
+                const country = item.dataset.country;
+                
+                // Fly to country
+                window.EmotionMapGlobe.flyToLocation(lat, lng, 1.5);
+                
+                // Clear search and hide suggestions
+                e.target.value = country;
+                suggestionsContainer.style.display = 'none';
+                
+                // Open drawer
+                setTimeout(() => openRegionDrawer(country), 1200);
+            });
+        });
+    } else if (suggestionsContainer) {
+        suggestionsContainer.style.display = 'none';
+    }
     
     searchTimeout = setTimeout(async () => {
         console.log('🔍 Searching for:', query);
-        const results = await window.EmotionMapAPI.searchEmotions(query);
         
-        // TODO: Display search results or filter globe
-        if (results && results.length > 0) {
-            console.log('📍 Found', results.length, 'results');
-            // You can update the globe to show only search results
+        const matchingCountry = currentMapData.find(country => 
+            country.country.toLowerCase() === query.toLowerCase()
+        );
+        
+        if (matchingCountry) {
+            console.log('✓ Found country:', matchingCountry.country);
+            
+            window.EmotionMapGlobe.flyToLocation(
+                matchingCountry.lat, 
+                matchingCountry.lng, 
+                1.5
+            );
+            
+            setTimeout(() => openRegionDrawer(matchingCountry.country), 1200);
+            
+            e.target.style.borderColor = '#00E676';
+            setTimeout(() => { e.target.style.borderColor = ''; }, 2000);
+            
+        } else {
+            console.log('❌ No results found for:', query);
+            e.target.style.borderColor = '#FF3B5C';
+            setTimeout(() => { e.target.style.borderColor = ''; }, 2000);
         }
-    }, 500);
+    }, 800);
 }
 
 /**

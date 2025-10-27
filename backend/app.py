@@ -46,22 +46,22 @@ if __name__ == '__main__':
     print("📊 API available at: http://localhost:5000/api/health")
     app.run(debug=True, port=5000, host='0.0.0.0')
     
-    print("\n>>> Starting background data collection scheduler...")
-    scheduler = start_scheduler()
+    # print("\n>>> Starting background data collection scheduler...")
+    # scheduler = start_scheduler()
     
-    # Register shutdown handler
-    atexit.register(shutdown_scheduler)
+    # # Register shutdown handler
+    # atexit.register(shutdown_scheduler)
     
-    print("\n>>> Background scheduler is running!")
-    print(">>> Collecting data every 60 minutes from:")
-    print("    - RSS Feeds")
-    print("    - News API")
-    print("    - Reddit")
-    print("="*60 + "\n")
+    # print("\n>>> Background scheduler is running!")
+    # print(">>> Collecting data every 60 minutes from:")
+    # print("    - RSS Feeds")
+    # print("    - News API")
+    # print("    - Reddit")
+    # print("="*60 + "\n")
     
-    # Run Flask app
-    try:
-        app.run(debug=True, port=5000, host='0.0.0.0')
-    except KeyboardInterrupt:
-        print("\n>>> Server stopped by user")
-        shutdown_scheduler()
+    # # Run Flask app
+    # try:
+    #     app.run(debug=True, port=5000, host='0.0.0.0')
+    # except KeyboardInterrupt:
+    #     print("\n>>> Server stopped by user")
+    #     shutdown_scheduler()

@@ -198,6 +198,25 @@ body {
     position: relative;
 }
 
+.search-suggestion {
+    padding: 0.875rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.search-suggestion:last-child {
+    border-bottom: none;
+}
+
+.search-suggestion:hover {
+    background: rgba(0, 217, 255, 0.1);
+    padding-left: 1.5rem;
+}
+
 .search-input {
     width: 100%;
     padding: 0.875rem 1rem 0.875rem 3rem;

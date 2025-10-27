@@ -164,16 +164,7 @@ def initialize_database(db_path='emotion_map.db'):
     print(f"📏 Size: {os.path.getsize(db_path)} bytes")
     print("="*60)
     
-    print("\n🚀 Next steps:")
-    print("  1. Start collecting data:")
-    print("     python backend/data_collection/rss_collector.py")
-    print("     python backend/data_collection/reddit_collector.py")
-    print("     python backend/data_collection/news_collector.py")
-    print("\n  2. Test the database:")
-    print("     python test_db.py")
-    print("\n  3. Start Flask server:")
-    print("     python backend/app.py")
-    print("="*60 + "\n")
+
 
 if __name__ == '__main__':
     initialize_database()

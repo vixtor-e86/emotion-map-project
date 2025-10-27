@@ -61,7 +61,8 @@ def create_reddit_instance():
     )
     return reddit
 
-def collect_reddit_data(limit_per_sub=20, retries=2):
+def collect_reddit_data(limit_per_sub=50, retries=2):
+
 
     """
     Collect data from Reddit and save to database.

@@ -61,7 +61,25 @@
                     class="search-input" 
                     id="searchInput" 
                     placeholder="Search location, topic, or event..."
+                    autocomplete="off"
                 >
+                <!-- Suggestions dropdown -->
+                <div id="searchSuggestions" style="
+                    position: absolute;
+                    top: 100%;
+                    left: 0;
+                    right: 0;
+                    background: rgba(26, 29, 46, 0.95);
+                    backdrop-filter: blur(20px);
+                    border-radius: 12px;
+                    margin-top: 8px;
+                    display: none;
+                    max-height: 300px;
+                    overflow-y: auto;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+                    z-index: 1000;
+                "></div>
             </div>
 
             <div class="filters-container">

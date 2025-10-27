@@ -21,7 +21,7 @@ RSS_FEEDS = {
     "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
     "NHK World": "https://www3.nhk.or.jp/rss/news/cat0.xml",
     "CNN": "http://rss.cnn.com/rss/edition_world.rss",
-    "The Guardian": "https://www.theguardian.com/world/rss",
+    # "The Guardian": "https://www.theguardian.com/world/rss",
     "DW": "https://rss.dw.com/rdf/rss-en-all",
     "France 24": "https://www.france24.com/en/rss",
     "Infobae": "https://www.infobae.com/america/rss.xml",

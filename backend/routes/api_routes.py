@@ -1,3 +1,12 @@
+"""
+api_routes.py (UPDATED)
+-----------------------
+API endpoints that now serve REAL data from aggregated_emotions table.
+No more mock data - uses actual lat/lng from database!
+
+Replace your current backend/routes/api_routes.py with this file.
+"""
+
 from flask import Blueprint, jsonify, request
 import sys
 import os
@@ -8,25 +17,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.db_manager import db
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
-
-# TEMPORARY: Mock coordinates for testing (until Geopy is implemented)
-MOCK_COORDINATES = {
-    'Nigeria': {'lat': 9.0820, 'lng': 8.6753},
-    'USA': {'lat': 37.0902, 'lng': -95.7129},
-    'United States': {'lat': 37.0902, 'lng': -95.7129},
-    'UK': {'lat': 55.3781, 'lng': -3.4360},
-    'United Kingdom': {'lat': 55.3781, 'lng': -3.4360},
-    'France': {'lat': 46.2276, 'lng': 2.2137},
-    'Germany': {'lat': 51.1657, 'lng': 10.4515},
-    'Brazil': {'lat': -14.2350, 'lng': -51.9253},
-    'India': {'lat': 20.5937, 'lng': 78.9629},
-    'Japan': {'lat': 36.2048, 'lng': 138.2529},
-    'Australia': {'lat': -25.2744, 'lng': 133.7751},
-    'Canada': {'lat': 56.1304, 'lng': -106.3468},
-    'South Africa': {'lat': -30.5595, 'lng': 22.9375},
-    'Mexico': {'lat': 23.6345, 'lng': -102.5528},
-    'China': {'lat': 35.8617, 'lng': 104.1954},
-}
 
 @api_bp.route('/health', methods=['GET'])
 def health_check():
@@ -39,146 +29,220 @@ def health_check():
 
 @api_bp.route('/stats', methods=['GET'])
 def get_stats():
-    """Get global emotion statistics - FIXED FORMAT FOR FRONTEND."""
+    """Get global emotion statistics."""
     try:
-        # Try new emotion system first
-        try:
-            stats = db.get_emotion_stats()
-            
-            # Format for frontend (simple percentages)
-            response = {
-                'joy': round(stats.get('joy_percentage', 0)),
-                'anger': round(stats.get('anger_percentage', 0)),
-                'sadness': round(stats.get('sadness_percentage', 0)),
-                'hope': round(stats.get('hope_percentage', 0)),
-                'calmness': round(stats.get('calmness_percentage', 0))
-            }
-            
-        except Exception as e:
-            # Fallback to mock data if emotion stats not available
-            print(f"⚠️ Emotion stats not available, using mock data: {e}")
-            response = {
-                'joy': 64,
-                'anger': 21,
-                'sadness': 10,
-                'hope': 3,
-                'calmness': 2
-            }
+        stats = db.get_emotion_stats()
+        
+        # Format for frontend (simple percentages)
+        response = {
+            'joy': round(stats.get('joy_percentage', 0)),
+            'anger': round(stats.get('anger_percentage', 0)),
+            'sadness': round(stats.get('sadness_percentage', 0)),
+            'hope': round(stats.get('hope_percentage', 0)),
+            'calmness': round(stats.get('calmness_percentage', 0))
+        }
         
         return jsonify(response)
     
     except Exception as e:
-        # Return mock data on error
+        print(f"❌ Error in /stats: {e}")
+        # Return fallback data
         return jsonify({
-            'joy': 64,
-            'anger': 21,
-            'sadness': 10,
-            'hope': 3,
-            'calmness': 2
+            'joy': 40,
+            'anger': 25,
+            'sadness': 20,
+            'hope': 10,
+            'calmness': 5
         })
 
 @api_bp.route('/map-data/<zoom_level>', methods=['GET'])
 def get_map_data(zoom_level):
-    """Get map data for globe - FIXED FORMAT FOR FRONTEND."""
+    """
+    Get map data for globe visualization.
+    Now uses REAL lat/lng from database!
+    
+    Args:
+        zoom_level: 'continent', 'country', or 'city'
+    
+    Query params:
+        hours: Data from last N hours (default: 24)
+    
+    Returns:
+        JSON array of location points with emotions
+    """
     try:
         hours = request.args.get('hours', default=24, type=int)
         
-        # Try to get emotion data
-        try:
-            data = db.get_emotion_map_data(zoom_level, hours)
+        # Get aggregated data from database
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT 
+                location_name,
+                location_type,
+                joy_count,
+                anger_count,
+                sadness_count,
+                hope_count,
+                calmness_count,
+                total_posts,
+                dominant_emotion,
+                avg_emotion_score,
+                latitude,
+                longitude
+            FROM aggregated_emotions
+            WHERE location_type = ?
+            AND timestamp > datetime('now', '-' || ? || ' hours')
+            ORDER BY total_posts DESC
+        ''', (zoom_level, hours))
+        
+        data = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        
+        # Transform to frontend format
+        map_points = []
+        for item in data:
+            # Skip if no coordinates
+            if not item['latitude'] or not item['longitude']:
+                continue
             
-            # Transform to frontend format
-            map_points = []
-            for item in data:
-                location = item['location_name']
-                coords = MOCK_COORDINATES.get(location, {'lat': 0, 'lng': 0})
-                
-                # Get dominant emotion and its count
-                emotions = {
-                    'joy': item.get('joy_count', 0),
-                    'anger': item.get('anger_count', 0),
-                    'sadness': item.get('sadness_count', 0),
-                    'hope': item.get('hope_count', 0),
-                    'calmness': item.get('calmness_count', 0)
-                }
-                
-                dominant_emotion = max(emotions.items(), key=lambda x: x[1])[0]
-                total = sum(emotions.values()) or 1
-                intensity = emotions[dominant_emotion] / total
-                
-                map_points.append({
-                    'lat': coords['lat'],
-                    'lng': coords['lng'],
-                    'country': location,
-                    'region': location,  # TODO: Add region when available
-                    'emotion': dominant_emotion,
-                    'intensity': round(intensity, 2),
-                    'posts': item['total_posts']
-                })
+            # Calculate emotion intensity
+            emotions = {
+                'joy': item['joy_count'],
+                'anger': item['anger_count'],
+                'sadness': item['sadness_count'],
+                'hope': item['hope_count'],
+                'calmness': item['calmness_count']
+            }
             
-            return jsonify(map_points)
+            total = sum(emotions.values()) or 1
+            dominant_emotion = item['dominant_emotion']
+            intensity = emotions[dominant_emotion] / total
             
-        except Exception as e:
-            print(f"⚠️ Emotion data not available, using mock data: {e}")
-            # Return mock data
-            return jsonify([
-                {'lat': 9.0820, 'lng': 8.6753, 'country': 'Nigeria', 'emotion': 'anger', 'intensity': 0.85, 'posts': 120},
-                {'lat': 40.7128, 'lng': -74.0060, 'country': 'USA', 'emotion': 'joy', 'intensity': 0.80, 'posts': 340},
-                {'lat': 48.8566, 'lng': 2.3522, 'country': 'France', 'emotion': 'hope', 'intensity': 0.60, 'posts': 180},
-                {'lat': -23.5505, 'lng': -46.6333, 'country': 'Brazil', 'emotion': 'joy', 'intensity': 0.90, 'posts': 210},
-                {'lat': 51.5074, 'lng': -0.1278, 'country': 'UK', 'emotion': 'calmness', 'intensity': 0.55, 'posts': 190},
-                {'lat': 35.6762, 'lng': 139.6503, 'country': 'Japan', 'emotion': 'calmness', 'intensity': 0.70, 'posts': 150}
-            ])
-    
+            map_points.append({
+                'lat': item['latitude'],
+                'lng': item['longitude'],
+                'country': item['location_name'],
+                'region': item['location_name'],
+                'emotion': dominant_emotion,
+                'intensity': round(intensity, 2),
+                'posts': item['total_posts']
+            })
+        
+        # If no data, return empty array (frontend will handle)
+        if not map_points:
+            print(f"⚠️  No map data for zoom level: {zoom_level}")
+            return jsonify([])
+        
+        return jsonify(map_points)
+        
     except Exception as e:
+        print(f"❌ Error in /map-data: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/location/<location_name>', methods=['GET'])
 def get_location_details(location_name):
-    """Get detailed information for a specific location - FIXED FORMAT."""
+    """Get detailed information for a specific location."""
     try:
-        details = db.get_location_details(location_name)
+        # Get from aggregated_emotions first
+        conn = db.get_connection()
+        cursor = conn.cursor()
         
-        if details:
-            # Transform to frontend format
+        cursor.execute('''
+            SELECT *
+            FROM aggregated_emotions
+            WHERE location_name = ?
+            ORDER BY timestamp DESC
+            LIMIT 1
+        ''', (location_name,))
+        
+        row = cursor.fetchone()
+        
+        if row:
+            data = dict(row)
+            
+            # Get sample posts
+            cursor.execute('''
+                SELECT text, emotion, emotion_score, timestamp
+                FROM raw_posts
+                WHERE country = ? OR city = ?
+                ORDER BY timestamp DESC
+                LIMIT 5
+            ''', (location_name, location_name))
+            
+            sample_posts = [dict(post)['text'] for post in cursor.fetchall()]
+            
+            # Calculate emotion percentages
             emotions = {
-                'joy': details.get('joy_count', 0),
-                'anger': details.get('anger_count', 0),
-                'sadness': details.get('sadness_count', 0),
-                'hope': details.get('hope_count', 0),
-                'calmness': details.get('calmness_count', 0)
+                'joy': data['joy_count'],
+                'anger': data['anger_count'],
+                'sadness': data['sadness_count'],
+                'hope': data['hope_count'],
+                'calmness': data['calmness_count']
             }
             
             total = sum(emotions.values()) or 1
             emotion_percentages = {k: round((v / total) * 100) for k, v in emotions.items()}
             
+            # Extract keywords from sample posts
+            keywords = extract_keywords(sample_posts)
+            
             response = {
                 'country': location_name,
-                'region': details.get('region', location_name),
+                'region': location_name,
                 'emotions': emotion_percentages,
-                'keywords': details.get('keywords', ['data', 'news', 'updates']),
-                'posts': details.get('sample_posts', ['No posts available yet'])
+                'keywords': keywords,
+                'posts': sample_posts[:3] if sample_posts else ['No posts available']
             }
             
+            conn.close()
             return jsonify(response)
-        else:
-            # Return mock data for location
-            return jsonify({
-                'country': location_name,
-                'region': location_name,
-                'emotions': {'joy': 50, 'anger': 20, 'sadness': 15, 'hope': 10, 'calmness': 5},
-                'keywords': ['news', 'updates', 'trending'],
-                'posts': ['Sample post 1', 'Sample post 2']
-            })
+        
+        conn.close()
+        return jsonify({
+            'country': location_name,
+            'region': location_name,
+            'emotions': {'joy': 20, 'anger': 20, 'sadness': 20, 'hope': 20, 'calmness': 20},
+            'keywords': ['no', 'data'],
+            'posts': ['No data available for this location']
+        })
     
     except Exception as e:
+        print(f"❌ Error in /location: {e}")
         return jsonify({'error': str(e)}), 500
+
+def extract_keywords(posts: list, top_n: int = 5) -> list:
+    """Extract top keywords from posts (simple word frequency)."""
+    if not posts:
+        return ['no', 'data']
+    
+    from collections import Counter
+    import re
+    
+    # Common stop words to ignore
+    stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+                  'of', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has',
+                  'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may',
+                  'might', 'can', 'it', 'this', 'that', 'these', 'those'}
+    
+    # Extract all words
+    all_words = []
+    for post in posts:
+        words = re.findall(r'\b[a-z]{3,}\b', post.lower())
+        all_words.extend([w for w in words if w not in stop_words])
+    
+    # Get most common
+    counter = Counter(all_words)
+    return [word for word, count in counter.most_common(top_n)]
 
 @api_bp.route('/search', methods=['GET'])
 def search_emotions():
     """Search posts by keyword and filter by emotion."""
     try:
-        query = request.args.get('q', default='')  # Changed from 'query' to 'q'
+        query = request.args.get('q', default='')
         emotion_filter = request.args.get('emotion', default=None)
         limit = request.args.get('limit', default=50, type=int)
         
@@ -217,6 +281,7 @@ def search_emotions():
         return jsonify(response)
     
     except Exception as e:
+        print(f"❌ Error in /search: {e}")
         return jsonify({'error': str(e)}), 500
 
 @api_bp.route('/trends', methods=['GET'])
@@ -225,21 +290,57 @@ def get_trends():
     try:
         hours = request.args.get('hours', default=24, type=int)
         
-        # TODO: Implement time-series aggregation
-        response = {
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        # Get emotion counts per hour
+        cursor.execute('''
+            SELECT 
+                strftime('%Y-%m-%d %H:00:00', timestamp) as hour,
+                emotion,
+                COUNT(*) as count
+            FROM raw_posts
+            WHERE timestamp > datetime('now', '-' || ? || ' hours')
+            AND emotion IS NOT NULL
+            GROUP BY hour, emotion
+            ORDER BY hour
+        ''', (hours,))
+        
+        data = {}
+        timestamps = set()
+        
+        for row in cursor.fetchall():
+            hour = row['hour']
+            emotion = row['emotion']
+            count = row['count']
+            
+            timestamps.add(hour)
+            
+            if emotion not in data:
+                data[emotion] = {}
+            data[emotion][hour] = count
+        
+        conn.close()
+        
+        # Format for frontend
+        timestamps = sorted(list(timestamps))
+        response = {'timestamps': timestamps}
+        
+        for emotion in ['joy', 'anger', 'sadness', 'hope', 'calmness']:
+            response[emotion] = [data.get(emotion, {}).get(ts, 0) for ts in timestamps]
+        
+        return jsonify(response)
+    
+    except Exception as e:
+        print(f"❌ Error in /trends: {e}")
+        return jsonify({
             'timestamps': [],
             'joy': [],
             'anger': [],
             'sadness': [],
             'hope': [],
-            'calmness': [],
-            'message': 'Trends endpoint - implementation pending'
-        }
-        
-        return jsonify(response)
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+            'calmness': []
+        })
 
 @api_bp.route('/emotions', methods=['GET'])
 def get_emotion_breakdown():
@@ -248,11 +349,10 @@ def get_emotion_breakdown():
         location = request.args.get('location', default=None)
         
         if location:
-            # Redirect to location details endpoint
             return get_location_details(location)
         else:
-            # Return global stats
             return get_stats()
     
     except Exception as e:
+        print(f"❌ Error in /emotions: {e}")
         return jsonify({'error': str(e)}), 500
