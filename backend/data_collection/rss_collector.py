@@ -4,6 +4,7 @@ rss_collector.py
 Collects news data from multiple RSS feeds across the world,
 standardizes the format, and stores in database.
 """
+    
 import feedparser
 from datetime import datetime
 import sys
