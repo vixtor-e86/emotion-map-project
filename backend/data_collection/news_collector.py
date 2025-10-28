@@ -1,7 +1,8 @@
 """
 news_collector.py
 -----------------
-Collects news headlines from NewsData.io API covering 32 countries.
+Collects news headlines from NewsData.io API covering 32 countries
+WITH DUPLICATE DETECTION.
 """
 
 import requests
@@ -41,16 +42,24 @@ API_URL = "https://newsdata.io/api/1/news"
 
 def collect_news_data():
     """
-    Collect news from NewsData.io and save to database.
-    Returns: Number of posts collected
+    Collect news from NewsData.io and save to database with duplicate detection.
+    Returns: Dictionary with collection statistics
     """
     api_key = Config.NEWSDATA_API_KEY
     
     if not api_key or api_key == "":
         print("❌ NEWS_API_KEY not found in .env file!")
-        return 0
+        return {
+            'unique_posts': 0,
+            'duplicates': 0,
+            'total_processed': 0,
+            'duplicate_rate': 0,
+            'successful_countries': 0,
+            'failed_countries': 0
+        }
     
     total_posts = 0
+    duplicate_posts = 0
     successful = 0
     failed = 0
     
@@ -76,27 +85,36 @@ def collect_news_data():
                 
                 if data.get('status') == 'success':
                     articles = data.get('results', [])
+                    country_posts = 0
+                    country_duplicates = 0
                     
                     for article in articles:
                         try:
                             text = f"{article.get('title', '')}. {article.get('description', '')}".strip()
                             
-                            # Save to database
-                            db.insert_raw_post(
+                            # Save to database (duplicate detection is automatic!)
+                            post_id = db.insert_raw_post(
                                 text=text,
                                 source=f"NewsAPI-{country_name}",
                                 country=country_name,
-                                emotion=None,  # ✅ NEW PARAMETER - will be analyzed later
-                                emotion_score=None  # ✅ NEW PARAMETER - will be analyzed later
+                                emotion=None,  # Will be analyzed later
+                                emotion_score=None  # Will be analyzed later
                             )
                             
-                            total_posts += 1
+                            if post_id is None:
+                                # Post was a duplicate
+                                duplicate_posts += 1
+                                country_duplicates += 1
+                            else:
+                                # Post was unique and saved
+                                total_posts += 1
+                                country_posts += 1
                             
                         except Exception as e:
                             print(f"\n❌ Error saving article: {e}")
                             continue
                     
-                    print(f"✅ {len(articles)} articles")
+                    print(f"✅ {country_posts} new, {country_duplicates} duplicates")
                     successful += 1
                     
                 else:
@@ -118,18 +136,38 @@ def collect_news_data():
             print(f"❌ Error: {str(e)}")
             failed += 1
     
+    # Calculate statistics
+    total_processed = total_posts + duplicate_posts
+    duplicate_rate = round((duplicate_posts / total_processed * 100), 1) if total_processed > 0 else 0
+    
     print(f"\n{'='*60}")
     print(f"✅ News API Collection Complete!")
     print(f"{'='*60}")
-    print(f"📊 Total articles: {total_posts}")
-    print(f"✅ Successful countries: {successful}/{len(COUNTRIES)}")
-    print(f"❌ Failed countries: {failed}")
+    print(f"📊 Unique Posts Saved:    {total_posts}")
+    print(f"🔄 Duplicates Skipped:    {duplicate_posts}")
+    print(f"📈 Total Processed:       {total_processed}")
+    print(f"📉 Duplicate Rate:        {duplicate_rate}%")
+    print(f"✅ Successful countries:  {successful}/{len(COUNTRIES)}")
+    print(f"❌ Failed countries:      {failed}")
     print(f"{'='*60}\n")
     
-    return total_posts
+    return {
+        'unique_posts': total_posts,
+        'duplicates': duplicate_posts,
+        'total_processed': total_processed,
+        'duplicate_rate': duplicate_rate,
+        'successful_countries': successful,
+        'failed_countries': failed
+    }
 
 # Test the collector
 if __name__ == "__main__":
-    print("🚀 Starting News API Collector Test...")
-    count = collect_news_data()
-    print(f"✅ Test Complete: {count} posts collected")
+    print("🚀 Starting News API Collector Test with Duplicate Detection...")
+    stats = collect_news_data()
+    print(f"\n📊 Final Statistics:")
+    print(f"   Unique Posts:     {stats['unique_posts']}")
+    print(f"   Duplicates:       {stats['duplicates']}")
+    print(f"   Duplicate Rate:   {stats['duplicate_rate']}%")
+    print(f"   Successful:       {stats['successful_countries']}")
+    print(f"   Failed:           {stats['failed_countries']}")
+    print("\n✅ Test Complete!")

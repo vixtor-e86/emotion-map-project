@@ -7,6 +7,8 @@ Creates data for the 3D globe visualization with zoom levels:
 - country: 40+ points (Nigeria, USA, France, etc.)
 - city: 100+ points (Lagos, New York, Paris, etc.)
 
+FIXED: Now properly handles database updates (no duplicate rows!)
+
 Usage:
     python backend/processing/aggregator.py
 """
@@ -162,20 +164,45 @@ def aggregate_by_location(zoom_level: str = 'country'):
     
     return dict(aggregated)
 
+def clear_old_aggregated_data(zoom_level: str = None):
+    """
+    Delete old aggregated data (either all or for specific zoom level).
+    
+    Args:
+        zoom_level: If provided, only delete that zoom level. Otherwise delete all.
+    """
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    
+    if zoom_level:
+        cursor.execute('DELETE FROM aggregated_emotions WHERE location_type = ?', (zoom_level,))
+        print(f"   🗑️  Cleared old {zoom_level} data")
+    else:
+        cursor.execute('DELETE FROM aggregated_emotions')
+        print(f"   🗑️  Cleared all old aggregated data")
+    
+    conn.commit()
+    conn.close()
+
 def save_aggregated_data(zoom_level: str, aggregated: dict, silent: bool = False):
     """
     Save aggregated data to database with geocoding.
+    Uses INSERT OR REPLACE to avoid duplicates.
     
     Args:
         zoom_level: 'continent', 'country', or 'city'
         aggregated: Dictionary of aggregated data
+        silent: If True, minimal output
     """
-
-    print(f"\n📍 Geocoding {len(aggregated)} locations...")
-    print("-"*70)
+    if not silent:
+        print(f"\n📍 Geocoding {len(aggregated)} locations...")
+        print("-"*70)
     
     geocoded = 0
     failed = 0
+    
+    conn = db.get_connection()
+    cursor = conn.cursor()
     
     for location_name, data in aggregated.items():
         try:
@@ -190,18 +217,17 @@ def save_aggregated_data(zoom_level: str, aggregated: dict, silent: bool = False
                 status = "✗"
                 lat, lng = 0.0, 0.0  # Fallback coordinates
             
-            print(f"   {status} {location_name:30s} → ({lat:8.4f}, {lng:8.4f})")
+            if not silent:
+                print(f"   {status} {location_name:30s} → ({lat:8.4f}, {lng:8.4f})")
             
-            # Save to database
-            conn = db.get_connection()
-            cursor = conn.cursor()
-            
+            # ✅ FIX: Use INSERT OR REPLACE to avoid duplicates
+            # This will update if (location_name, location_type) already exists
             cursor.execute('''
-                INSERT INTO aggregated_emotions 
+                INSERT OR REPLACE INTO aggregated_emotions 
                 (location_name, location_type, joy_count, anger_count, 
                  sadness_count, hope_count, calmness_count, total_posts,
-                 dominant_emotion, avg_emotion_score, latitude, longitude)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 dominant_emotion, avg_emotion_score, latitude, longitude, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             ''', (
                 location_name,
                 zoom_level,
@@ -217,24 +243,27 @@ def save_aggregated_data(zoom_level: str, aggregated: dict, silent: bool = False
                 lng
             ))
             
-            conn.commit()
-            conn.close()
-            
         except Exception as e:
-            print(f"   ❌ Error saving {location_name}: {e}")
+            if not silent:
+                print(f"   ❌ Error saving {location_name}: {e}")
             failed += 1
             continue
     
-    print("-"*70)
-    print(f"   Successfully geocoded: {geocoded}/{len(aggregated)}")
-    print(f"   Failed to geocode: {failed}/{len(aggregated)}")
+    conn.commit()
+    conn.close()
+    
+    if not silent:
+        print("-"*70)
+        print(f"   Successfully geocoded: {geocoded}/{len(aggregated)}")
+        print(f"   Failed to geocode: {failed}/{len(aggregated)}")
 
-def process_all_zoom_levels(silent: bool = False):
+def process_all_zoom_levels(silent: bool = False, clear_before: bool = True):
     """
     Process aggregation for all zoom levels.
     
     Args:
         silent: If True, minimal output (for background tasks)
+        clear_before: If True, delete old data before inserting new (default: True)
     """
     
     if not silent:
@@ -242,12 +271,23 @@ def process_all_zoom_levels(silent: bool = False):
         print("DATA AGGREGATOR")
         print("="*60)
     
+    # ✅ OPTION 1: Clear all old data before processing (clean slate)
+    if clear_before:
+        if not silent:
+            print("\n🗑️  Clearing old aggregated data...")
+        clear_old_aggregated_data()  # Delete everything
+    
     zoom_levels = ['continent', 'country', 'city']
     start_time = datetime.now()
     
     for zoom in zoom_levels:
         if not silent:
             print(f"\nProcessing {zoom}...")
+        
+        # ✅ OPTION 2: Clear only this zoom level's data (if not clearing all)
+        # Uncomment this if you want per-zoom-level clearing instead:
+        # if not clear_before:
+        #     clear_old_aggregated_data(zoom)
         
         # Aggregate data
         aggregated = aggregate_by_location(zoom)
@@ -277,7 +317,10 @@ def process_all_zoom_levels(silent: bool = False):
 
 if __name__ == '__main__':
     try:
-        process_all_zoom_levels()
+        # You can control the behavior here:
+        # clear_before=True  → Deletes ALL old data before processing (RECOMMENDED)
+        # clear_before=False → Uses INSERT OR REPLACE (updates existing rows)
+        process_all_zoom_levels(clear_before=True)
     except KeyboardInterrupt:
         print("\n\n⚠️  Process interrupted by user")
     except Exception as e:

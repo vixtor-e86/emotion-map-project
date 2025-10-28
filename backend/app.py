@@ -1,3 +1,9 @@
+"""
+app.py
+------
+Main Flask application with background scheduler integration.
+"""
+
 from flask import Flask, render_template
 from flask_cors import CORS
 from config import Config
@@ -5,6 +11,7 @@ from routes.api_routes import api_bp
 import atexit
 from scheduler.background_task import start_scheduler
 
+# Global scheduler instance
 scheduler = None
 
 def create_app(config_class=Config):
@@ -31,6 +38,7 @@ def create_app(config_class=Config):
         return render_template('dashboard.html')
     
     return app
+
 def shutdown_scheduler():
     """Gracefully shutdown scheduler on app exit."""
     global scheduler
@@ -40,27 +48,20 @@ def shutdown_scheduler():
         print(">>> Scheduler stopped successfully!")
 
 if __name__ == '__main__':
+    # Create Flask app
     app = create_app()
+    
+    # ✅ FIX: Start the background scheduler
     print("🚀 Starting Emotion Map Server...")
-    print("📍 Server running at: http://localhost:5000")
+    scheduler = start_scheduler()
+    
+    # ✅ FIX: Register cleanup function
+    atexit.register(shutdown_scheduler)
+    
+    # Display server info
+    print("\n📍 Server running at: http://localhost:5000")
     print("📊 API available at: http://localhost:5000/api/health")
+    print("⚠️  Press CTRL+C to stop server and scheduler\n")
+    
+    # Run Flask app
     app.run(debug=True, port=5000, host='0.0.0.0')
-    
-    # print("\n>>> Starting background data collection scheduler...")
-    # scheduler = start_scheduler()
-    
-    # # Register shutdown handler
-    # atexit.register(shutdown_scheduler)
-    # print("\n>>> Background scheduler is running!")
-    # print(">>> Collecting data every 60 minutes from:")
-    # print("    - RSS Feeds")
-    # print("    - News API")
-    # print("    - Reddit")
-    # print("="*60 + "\n")
-    
-    # # Run Flask app
-    # try:
-    #     app.run(debug=True, port=5000, host='0.0.0.0'
-    # except KeyboardInterrupt:
-    #     print("\n>>> Server stopped by user")
-    #     shutdown_scheduler()

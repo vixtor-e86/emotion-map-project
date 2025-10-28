@@ -5,7 +5,7 @@ Schedules and manages the automatic data collection pipeline.
 
 Tasks:
 - Run ALL collectors every hour (60 minutes)
-- RSS, News, Reddit, Twitter
+- RSS, News, Reddit
 - Process emotions, locations, and aggregate data
 - Log execution time and status
 """
@@ -24,7 +24,7 @@ from data_collection.rss_collector import collect_rss_data
 from data_collection.news_collector import collect_news_data
 from data_collection.reddit_collector import collect_reddit_data
 
-# Import processing functions (NEW!)
+# Import processing functions
 from processing.emotion_analyzer import process_posts as analyze_emotions
 from processing.location_extractor import process_posts as extract_locations
 from processing.aggregator import process_all_zoom_levels as aggregate_data
@@ -36,7 +36,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# NEW PROCESSING FUNCTIONS
 def process_emotions():
     """Analyze emotions in new posts."""
     try:
@@ -63,7 +62,7 @@ def process_aggregation():
     """Aggregate data by location."""
     try:
         logging.info("Starting data aggregation...")
-        aggregate_data(silent=True)
+        aggregate_data(silent=True, clear_before=True)  # ✅ Added clear_before parameter
         logging.info("Data aggregation complete")
         return True
     except Exception as e:
@@ -84,19 +83,22 @@ def run_data_collection():
         
         # PHASE 1: COLLECT DATA
         print("\n1️⃣ RSS Feeds...")
-        RSS = collect_rss_data()
-        logging.info(f"RSS: {RSS} posts")
+        rss_stats = collect_rss_data()
+        rss_count = rss_stats.get('unique_posts', 0) if isinstance(rss_stats, dict) else rss_stats
+        logging.info(f"RSS: {rss_count} unique posts ({rss_stats.get('duplicates', 0)} duplicates)")
 
         print("\n2️⃣ News API...")
-        News = collect_news_data()
-        logging.info(f"News: {News} posts")
+        news_stats = collect_news_data()
+        news_count = news_stats.get('unique_posts', 0) if isinstance(news_stats, dict) else news_stats
+        logging.info(f"News: {news_count} unique posts ({news_stats.get('duplicates', 0)} duplicates)")
 
         print("\n3️⃣ Reddit...")
-        Reddit = collect_reddit_data(limit_per_sub=20)
-        logging.info(f"Reddit: {Reddit} posts")
+        reddit_stats = collect_reddit_data(limit_per_sub=20)
+        reddit_count = reddit_stats.get('unique_posts', 0) if isinstance(reddit_stats, dict) else reddit_stats
+        logging.info(f"Reddit: {reddit_count} unique posts ({reddit_stats.get('duplicates', 0)} duplicates)")
         
-        # Calculate totals
-        post_count = RSS + News + Reddit
+        # ✅ FIX: Calculate total post count
+        post_count = rss_count + news_count + reddit_count
         
         # PHASE 2: PROCESS DATA (only if new posts collected)
         if post_count > 0:
@@ -116,16 +118,23 @@ def run_data_collection():
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
         
-        logging.info(f"✓ Collection successful: {post_count} posts in {duration:.2f}s")
-        print(f"\n✓ Pipeline complete: {post_count} total posts in {duration/60:.1f} min")
-        print(f"   - RSS: {RSS}")
-        print(f"   - News: {News}")
-        print(f"   - Reddit: {Reddit}")
-        print(f"✓ Next run in 60 minutes\n")
+        logging.info(f"✓ Collection successful: {post_count} unique posts in {duration:.2f}s")
+        print(f"\n{'='*60}")
+        print(f"✅ Collection Complete!")
+        print(f"{'='*60}")
+        print(f"   📊 Total Unique Posts: {post_count}")
+        print(f"   - RSS: {rss_count}")
+        print(f"   - News: {news_count}")
+        print(f"   - Reddit: {reddit_count}")
+        print(f"   ⏱️  Duration: {duration:.2f}s")
+        print(f"   ⏰ Next run in 60 minutes")
+        print(f"{'='*60}\n")
         
     except Exception as e:
         logging.error(f"✗ Data collection failed: {e}")
         print(f"✗ Error in pipeline: {e}")
+        import traceback
+        traceback.print_exc()
 
 def start_scheduler():
     """
@@ -139,9 +148,14 @@ def start_scheduler():
     scheduler.start()
     
     logging.info("🚀 Scheduler started. Collecting data every 60 minutes.")
-    print("🚀 Scheduler started - collecting data every 60 minutes.")
+    print("\n" + "="*60)
+    print("🚀 BACKGROUND SCHEDULER STARTED")
+    print("="*60)
+    print("⏰ Collection interval: Every 60 minutes")
     print("📊 Sources: RSS, News, Reddit")
     print("⚙️  Processing: Emotions, Locations, Aggregation")
+    print("📝 Logs: data_collection.log")
+    print("="*60 + "\n")
 
     return scheduler
 

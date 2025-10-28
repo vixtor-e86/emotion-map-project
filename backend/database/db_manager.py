@@ -2,6 +2,7 @@
 db_manager.py
 -------------
 Handles all database operations for the 5-emotion system.
+NOW WITH BUILT-IN DUPLICATE DETECTION!
 """
 
 import sqlite3
@@ -9,16 +10,19 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import sys
 import os
+import hashlib
+import re
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import Config
 
 class DatabaseManager:
-    """Handles all database operations."""
+    """Handles all database operations with duplicate detection."""
     
     def __init__(self, db_path: str = None):
         self.db_path = db_path or Config.DATABASE_PATH
+        self.enable_duplicate_check = True  # Toggle duplicate detection
     
     def get_connection(self):
         """Get database connection."""
@@ -27,27 +31,91 @@ class DatabaseManager:
         return conn
     
     # ============================================
-    # RAW POSTS OPERATIONS
+    # DUPLICATE DETECTION METHODS
+    # ============================================
+    
+    def normalize_text(self, text: str) -> str:
+        """Normalize text for duplicate comparison."""
+        if not text:
+            return ""
+        text = text.lower()
+        text = re.sub(r'http\S+|www.\S+', '', text)  # Remove URLs
+        text = re.sub(r'[^\w\s]', ' ', text)  # Remove punctuation
+        text = ' '.join(text.split())  # Remove extra whitespace
+        return text.strip()
+    
+    def create_text_hash(self, text: str, length: int = 200) -> str:
+        """Create hash from first N characters of normalized text."""
+        normalized = self.normalize_text(text)
+        truncated = normalized[:length]
+        return hashlib.md5(truncated.encode()).hexdigest()
+    
+    def is_duplicate(self, text: str) -> bool:
+        """
+        Check if post is duplicate using hash-based detection.
+        
+        Args:
+            text: Post content to check
+        
+        Returns:
+            True if duplicate exists, False if unique
+        """
+        if not self.enable_duplicate_check:
+            return False
+        
+        if not text or len(text.strip()) < 10:
+            return False
+        
+        text_hash = self.create_text_hash(text)
+        
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Check recent posts (last 7 days) for same hash
+        cursor.execute('''
+            SELECT id, text FROM raw_posts 
+            WHERE timestamp > datetime('now', '-7 days')
+            LIMIT 1000
+        ''')
+        
+        posts = cursor.fetchall()
+        conn.close()
+        
+        for post in posts:
+            post_hash = self.create_text_hash(post['text'])
+            if post_hash == text_hash:
+                return True
+        
+        return False
+    
+    # ============================================
+    # RAW POSTS OPERATIONS (UPDATED)
     # ============================================
     
     def insert_raw_post(self, text: str, source: str, city: str = None, 
                        country: str = None, continent: str = None,
-                       emotion: str = None, emotion_score: float = None):
+                       emotion: str = None, emotion_score: float = None,
+                       skip_duplicate_check: bool = False):
         """
-        Insert a raw post into the database.
+        Insert a raw post into the database with duplicate detection.
         
         Args:
             text: Post content
-            source: Source (e.g., "RSS-BBC", "Reddit-r/worldnews", "Twitter")
+            source: Source (e.g., "RSS-BBC", "Reddit-r/worldnews")
             city: City name (optional)
             country: Country name (optional)
             continent: Continent name (optional)
             emotion: Emotion classification (joy/anger/sadness/hope/calmness)
             emotion_score: Confidence score (0.0 to 1.0)
+            skip_duplicate_check: Set to True to bypass duplicate detection
         
         Returns:
-            Post ID
+            Post ID if inserted, None if duplicate
         """
+        # Check for duplicates (unless explicitly skipped)
+        if not skip_duplicate_check and self.is_duplicate(text):
+            return None  # Duplicate found, skip insertion
+        
         conn = self.get_connection()
         cursor = conn.cursor()
         
@@ -125,6 +193,90 @@ class DatabaseManager:
         return [dict(row) for row in rows]
     
     # ============================================
+    # DUPLICATE MANAGEMENT
+    # ============================================
+    
+    def get_duplicate_stats(self) -> Dict:
+        """Get statistics about duplicates in database."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Total posts
+        cursor.execute('SELECT COUNT(*) as total FROM raw_posts')
+        total = cursor.fetchone()['total']
+        
+        # Recent posts
+        cursor.execute('''
+            SELECT COUNT(*) as recent 
+            FROM raw_posts 
+            WHERE timestamp > datetime('now', '-1 day')
+        ''')
+        recent = cursor.fetchone()['recent']
+        
+        # Estimate duplicates
+        cursor.execute('''
+            SELECT COUNT(*) as dups
+            FROM (
+                SELECT LOWER(SUBSTR(text, 1, 200)) as normalized, COUNT(*) as cnt
+                FROM raw_posts
+                GROUP BY normalized
+                HAVING cnt > 1
+            )
+        ''')
+        duplicates = cursor.fetchone()['dups']
+        
+        conn.close()
+        
+        return {
+            'total_posts': total,
+            'recent_posts_24h': recent,
+            'potential_duplicates': duplicates,
+            'duplicate_rate': round((duplicates / total * 100), 1) if total > 0 else 0
+        }
+    
+    def clean_duplicates(self, dry_run: bool = True) -> int:
+        """
+        Remove duplicate posts (keeps oldest entry).
+        
+        Args:
+            dry_run: If True, only count duplicates without deleting
+        
+        Returns:
+            Number of duplicates found/removed
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, text, timestamp
+            FROM raw_posts
+            ORDER BY timestamp ASC
+        ''')
+        
+        posts = cursor.fetchall()
+        seen_hashes = {}
+        to_delete = []
+        
+        for post in posts:
+            text_hash = self.create_text_hash(post['text'])
+            
+            if text_hash in seen_hashes:
+                to_delete.append(post['id'])
+            else:
+                seen_hashes[text_hash] = post['id']
+        
+        if not dry_run and to_delete:
+            cursor.executemany(
+                'DELETE FROM raw_posts WHERE id = ?',
+                [(pid,) for pid in to_delete]
+            )
+            conn.commit()
+        
+        conn.close()
+        
+        return len(to_delete)
+    
+    # ============================================
     # AGGREGATED EMOTIONS OPERATIONS
     # ============================================
     
@@ -132,20 +284,7 @@ class DatabaseManager:
                                    joy_count: int, anger_count: int, sadness_count: int,
                                    hope_count: int, calmness_count: int,
                                    dominant_emotion: str, avg_emotion_score: float):
-        """
-        Insert aggregated emotion data for a location.
-        
-        Args:
-            location_name: Name of location (e.g., "USA", "Europe", "Lagos")
-            location_type: Type (continent/country/city)
-            joy_count: Number of joy posts
-            anger_count: Number of anger posts
-            sadness_count: Number of sadness posts
-            hope_count: Number of hope posts
-            calmness_count: Number of calmness posts
-            dominant_emotion: Most common emotion
-            avg_emotion_score: Average confidence score
-        """
+        """Insert aggregated emotion data for a location."""
         conn = self.get_connection()
         cursor = conn.cursor()
         
@@ -163,16 +302,7 @@ class DatabaseManager:
         conn.close()
     
     def get_emotion_map_data(self, zoom_level: str = 'country', hours: int = 24) -> List[Dict]:
-        """
-        Get aggregated emotion data for map visualization.
-        
-        Args:
-            zoom_level: continent/country/city
-            hours: Data from last N hours
-        
-        Returns:
-            List of location emotion data
-        """
+        """Get aggregated emotion data for map visualization."""
         conn = self.get_connection()
         cursor = conn.cursor()
         
@@ -180,17 +310,9 @@ class DatabaseManager:
         
         cursor.execute('''
             SELECT 
-                location_name,
-                location_type,
-                joy_count,
-                anger_count,
-                sadness_count,
-                hope_count,
-                calmness_count,
-                total_posts,
-                dominant_emotion,
-                avg_emotion_score,
-                timestamp
+                location_name, location_type, joy_count, anger_count, sadness_count,
+                hope_count, calmness_count, total_posts, dominant_emotion,
+                avg_emotion_score, timestamp
             FROM aggregated_emotions
             WHERE location_type = ? AND timestamp > ?
             ORDER BY timestamp DESC
@@ -240,20 +362,12 @@ class DatabaseManager:
     # ============================================
     
     def get_emotion_stats(self) -> Dict:
-        """
-        Get global emotion statistics.
-        
-        Returns:
-            Dictionary with emotion percentages and totals
-        """
+        """Get global emotion statistics."""
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Get emotion counts from last 24 hours
         cursor.execute('''
-            SELECT 
-                emotion,
-                COUNT(*) as count
+            SELECT emotion, COUNT(*) as count
             FROM raw_posts
             WHERE timestamp > datetime('now', '-24 hours')
             AND emotion IS NOT NULL
@@ -261,11 +375,8 @@ class DatabaseManager:
         ''')
         
         emotion_counts = {row['emotion']: row['count'] for row in cursor.fetchall()}
-        
-        # Calculate total
         total = sum(emotion_counts.values())
         
-        # Calculate percentages
         stats = {
             'total_posts': total,
             'joy_percentage': round((emotion_counts.get('joy', 0) / total * 100), 1) if total > 0 else 0,
@@ -275,13 +386,11 @@ class DatabaseManager:
             'calmness_percentage': round((emotion_counts.get('calmness', 0) / total * 100), 1) if total > 0 else 0,
         }
         
-        # Find dominant emotion
         if total > 0:
             stats['dominant_emotion'] = max(emotion_counts, key=emotion_counts.get)
         else:
             stats['dominant_emotion'] = 'none'
         
-        # Count countries
         cursor.execute('''
             SELECT COUNT(DISTINCT country) as countries_tracked
             FROM raw_posts
@@ -293,22 +402,12 @@ class DatabaseManager:
         return stats
     
     def get_location_details(self, location_name: str) -> Optional[Dict]:
-        """
-        Get detailed emotion information for a specific location.
-        
-        Args:
-            location_name: Name of location
-        
-        Returns:
-            Dictionary with emotion breakdown and sample posts
-        """
+        """Get detailed emotion information for a specific location."""
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Try to get from aggregated_emotions first
         cursor.execute('''
-            SELECT *
-            FROM aggregated_emotions
+            SELECT * FROM aggregated_emotions
             WHERE location_name = ?
             ORDER BY timestamp DESC
             LIMIT 1
@@ -319,7 +418,6 @@ class DatabaseManager:
         if row:
             result = dict(row)
             
-            # Get sample posts
             cursor.execute('''
                 SELECT text, emotion, emotion_score, timestamp
                 FROM raw_posts
@@ -334,7 +432,6 @@ class DatabaseManager:
             conn.close()
             return result
         
-        # If not in aggregated table, calculate from raw_posts
         cursor.execute('''
             SELECT 
                 COUNT(*) as total_posts,
@@ -351,7 +448,6 @@ class DatabaseManager:
         stats = dict(cursor.fetchone())
         
         if stats and stats['total_posts'] > 0:
-            # Get sample posts
             cursor.execute('''
                 SELECT text, emotion, emotion_score, timestamp
                 FROM raw_posts
@@ -375,15 +471,7 @@ class DatabaseManager:
     # ============================================
     
     def cleanup_old_data(self, days: int = 7):
-        """
-        Remove data older than specified days.
-        
-        Args:
-            days: Number of days to keep
-        
-        Returns:
-            Number of deleted records
-        """
+        """Remove data older than specified days."""
         conn = self.get_connection()
         cursor = conn.cursor()
         

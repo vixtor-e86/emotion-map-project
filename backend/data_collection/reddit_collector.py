@@ -2,7 +2,7 @@
 reddit_collector.py
 -------------------
 Collects posts from 50+ global subreddits using Reddit's API (via PRAW)
-and saves them to database.
+and saves them to database WITH DUPLICATE DETECTION.
 """
 
 import praw
@@ -62,14 +62,13 @@ def create_reddit_instance():
     return reddit
 
 def collect_reddit_data(limit_per_sub=50, retries=2):
-
-
     """
-    Collect data from Reddit and save to database.
-    Returns: Number of posts collected
+    Collect data from Reddit and save to database with duplicate detection.
+    Returns: Dictionary with collection statistics
     """
     reddit = create_reddit_instance()
     total_posts = 0
+    duplicate_posts = 0
     skipped_subreddits = []
     
     print(f"\n📱 Starting Reddit data collection from {len(SUBREDDITS)} subreddits...\n")
@@ -81,26 +80,36 @@ def collect_reddit_data(limit_per_sub=50, retries=2):
                 subreddit = reddit.subreddit(sub)
                 print(f"📡 Collecting from r/{sub}...")
                 
+                sub_posts = 0
+                sub_duplicates = 0
+                
                 for post in subreddit.top(time_filter="day", limit=limit_per_sub):
                     try:
                         country = SUBREDDIT_COUNTRY_MAP.get(sub, "International")
                         
-                        # Save to database
-                        db.insert_raw_post(
+                        # Save to database (duplicate detection is automatic!)
+                        post_id = db.insert_raw_post(
                             text=post.title,
                             source=f"Reddit-r/{sub}",
                             country=country,
-                            emotion=None,  # ✅ NEW PARAMETER - will be analyzed later
-                            emotion_score=None  # ✅ NEW PARAMETER - will be analyzed later
+                            emotion=None,  # Will be analyzed later
+                            emotion_score=None  # Will be analyzed later
                         )
                         
-                        total_posts += 1
+                        if post_id is None:
+                            # Post was a duplicate
+                            duplicate_posts += 1
+                            sub_duplicates += 1
+                        else:
+                            # Post was unique and saved
+                            total_posts += 1
+                            sub_posts += 1
                         
                     except Exception as e:
                         print(f"❌ Error saving post from r/{sub}: {e}")
                         continue
                 
-                print(f"✅ r/{sub} complete ({total_posts} total so far)")
+                print(f"✅ r/{sub} complete: {sub_posts} new, {sub_duplicates} duplicates (Total: {total_posts} unique)")
                 time.sleep(random.uniform(2, 4))  # Rate limit protection
                 break
                 
@@ -124,11 +133,35 @@ def collect_reddit_data(limit_per_sub=50, retries=2):
             log_file.write("\n".join(skipped_subreddits))
         print(f"\n⚠️ Logged {len(skipped_subreddits)} skipped subreddits")
     
-    print(f"\n✅ Reddit Collection Complete: {total_posts} posts saved to database")
-    return total_posts
+    # Calculate statistics
+    total_processed = total_posts + duplicate_posts
+    duplicate_rate = round((duplicate_posts / total_processed * 100), 1) if total_processed > 0 else 0
+    
+    print(f"\n" + "="*60)
+    print(f"✅ Reddit Collection Complete!")
+    print(f"="*60)
+    print(f"📊 Unique Posts Saved:    {total_posts}")
+    print(f"🔄 Duplicates Skipped:    {duplicate_posts}")
+    print(f"📈 Total Processed:       {total_processed}")
+    print(f"📉 Duplicate Rate:        {duplicate_rate}%")
+    print(f"="*60 + "\n")
+    
+    return {
+        'unique_posts': total_posts,
+        'duplicates': duplicate_posts,
+        'total_processed': total_processed,
+        'duplicate_rate': duplicate_rate,
+        'skipped_subreddits': len(skipped_subreddits)
+    }
 
 # Test the collector
 if __name__ == "__main__":
-    print("🚀 Starting Reddit Collector Test...")
-    count = collect_reddit_data(limit_per_sub=20)
-    print(f"✅ Test Complete: {count} posts collected")
+    print("🚀 Starting Reddit Collector Test with Duplicate Detection...")
+    stats = collect_reddit_data(limit_per_sub=20)
+    
+    print("\n📊 Final Statistics:")
+    print(f"   Unique Posts:     {stats['unique_posts']}")
+    print(f"   Duplicates:       {stats['duplicates']}")
+    print(f"   Duplicate Rate:   {stats['duplicate_rate']}%")
+    print(f"   Skipped Subreddits: {stats['skipped_subreddits']}")
+    print("\n✅ Test Complete!")

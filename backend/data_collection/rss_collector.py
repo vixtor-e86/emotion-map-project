@@ -2,7 +2,7 @@
 rss_collector.py
 ----------------
 Collects news data from multiple RSS feeds across the world,
-standardizes the format, and stores in database.
+standardizes the format, and stores in database WITH DUPLICATE DETECTION.
 """
     
 import feedparser
@@ -81,40 +81,76 @@ def guess_country_from_source(source):
 
 def collect_rss_data():
     """
-    Collect data from all RSS feeds and save to database.
-    Returns: Number of posts collected
+    Collect data from all RSS feeds and save to database with duplicate detection.
+    Returns: Dictionary with collection statistics
     """
     total_posts = 0
+    duplicate_posts = 0
+    
+    print(f"\n📡 Starting RSS data collection from {len(RSS_FEEDS)} feeds...\n")
     
     for source, url in RSS_FEEDS.items():
-        print(f"📡 Fetching: {source}")
+        print(f"📡 Fetching: {source}...", end=' ')
         entries = parse_feed(url)
+        
+        feed_posts = 0
+        feed_duplicates = 0
         
         for entry in entries:
             try:
                 text = entry.get("title", "No title available")
                 country = guess_country_from_source(source)
                 
-                # Save to database (sentiment will be added later by processor)
-                db.insert_raw_post(
+                # Save to database (duplicate detection is automatic!)
+                post_id = db.insert_raw_post(
                     text=text,
                     source=f"RSS-{source}",
                     country=country,
-                    emotion=None,  # ✅ NEW PARAMETER - will be analyzed later
-                    emotion_score=None  # ✅ NEW PARAMETER - will be analyzed later
+                    emotion=None,  # Will be analyzed later
+                    emotion_score=None  # Will be analyzed later
                 )
                 
-                total_posts += 1
+                if post_id is None:
+                    # Post was a duplicate
+                    duplicate_posts += 1
+                    feed_duplicates += 1
+                else:
+                    # Post was unique and saved
+                    total_posts += 1
+                    feed_posts += 1
                 
             except Exception as e:
-                print(f"❌ Error saving post from {source}: {e}")
+                print(f"\n❌ Error saving post from {source}: {e}")
                 continue
+        
+        print(f"✅ {feed_posts} new, {feed_duplicates} duplicates (Total: {total_posts} unique)")
     
-    print(f"✅ RSS Collection Complete: {total_posts} posts saved to database")
-    return total_posts
+    # Calculate statistics
+    total_processed = total_posts + duplicate_posts
+    duplicate_rate = round((duplicate_posts / total_processed * 100), 1) if total_processed > 0 else 0
+    
+    print(f"\n{'='*60}")
+    print(f"✅ RSS Collection Complete!")
+    print(f"{'='*60}")
+    print(f"📊 Unique Posts Saved:    {total_posts}")
+    print(f"🔄 Duplicates Skipped:    {duplicate_posts}")
+    print(f"📈 Total Processed:       {total_processed}")
+    print(f"📉 Duplicate Rate:        {duplicate_rate}%")
+    print(f"{'='*60}\n")
+    
+    return {
+        'unique_posts': total_posts,
+        'duplicates': duplicate_posts,
+        'total_processed': total_processed,
+        'duplicate_rate': duplicate_rate
+    }
 
 # Test the collector independently
 if __name__ == "__main__":
-    print("🚀 Starting RSS Collector Test...")
-    count = collect_rss_data()
-    print(f"✅ Test Complete: {count} posts collected")
+    print("🚀 Starting RSS Collector Test with Duplicate Detection...")
+    stats = collect_rss_data()
+    print(f"\n📊 Final Statistics:")
+    print(f"   Unique Posts:     {stats['unique_posts']}")
+    print(f"   Duplicates:       {stats['duplicates']}")
+    print(f"   Duplicate Rate:   {stats['duplicate_rate']}%")
+    print("\n✅ Test Complete!")
