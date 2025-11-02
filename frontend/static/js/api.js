@@ -8,11 +8,11 @@ const API_BASE = 'http://localhost:5000/api';
 
 // Emotion Configuration
 const EMOTION_CONFIG = {
-    joy: { color: '#FFD600', emoji: '😊', label: 'Joy' },
-    anger: { color: '#FF3B5C', emoji: '😠', label: 'Anger' },
-    sadness: { color: '#9B59B6', emoji: '😢', label: 'Sadness' },
-    hope: { color: '#00E676', emoji: '🟢', label: 'Hope' },
-    calmness: { color: '#00A8FF', emoji: '😌', label: 'Calm' }
+    joy: { color: '#10b981', emoji: '🟢', label: 'Strong Bullish', sentiment: 'bullish', score: 85 },
+    anger: { color: '#ef4444', emoji: '🔴', label: 'Strong Bearish', sentiment: 'bearish', score: 25 },
+    sadness: { color: '#f87171', emoji: '📉', label: 'Cautious', sentiment: 'bearish', score: 35 },
+    hope: { color: '#34d399', emoji: '📈', label: 'Optimistic', sentiment: 'bullish', score: 75 },
+    calmness: { color: '#94a3b8', emoji: '⚪', label: 'Neutral', sentiment: 'neutral', score: 50 }
 };
 
 /* ============================================

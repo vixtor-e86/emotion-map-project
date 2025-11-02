@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emotion Map - Real-Time Global Emotions</title>
+    <title>FinancePulse - Market Sentiment Dashboard</title>
     
     <!-- Globe.gl Library -->
     <script src="https://unpkg.com/globe.gl"></script>
@@ -15,14 +15,14 @@
     <!-- Loading Overlay -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="loader"></div>
-        <div class="loading-text">Initializing Emotion Map...</div>
+        <div class="loading-text">Loading Market Intelligence...</div>
     </div>
 
     <!-- Top Bar -->
     <div class="top-bar">
         <div class="logo-section">
             <div class="logo"></div>
-            <div class="brand-name">Emotion Map</div>
+            <div class="brand-name">FinancePulse 📈</div>
         </div>
 
         <div class="emotion-stats" id="emotionStats">
@@ -60,7 +60,7 @@
                     type="text" 
                     class="search-input" 
                     id="searchInput" 
-                    placeholder="Search location, topic, or event..."
+                    placeholder="Search market, ticker, or country..."
                     autocomplete="off"
                 >
                 <!-- Suggestions dropdown -->
@@ -85,28 +85,28 @@
             <div class="filters-container">
                 <span class="filter-label">Filter:</span>
                 <button class="filter-btn" data-emotion="joy">
-                    <span>😊</span>
-                    <span>Joy</span>
+                    <span>🟢</span>
+                    <span>Bullish</span>
                 </button>
                 <button class="filter-btn" data-emotion="anger">
-                    <span>😠</span>
-                    <span>Anger</span>
+                    <span>🔴</span>
+                    <span>Bearish</span>
                 </button>
                 <button class="filter-btn" data-emotion="sadness">
-                    <span>😢</span>
-                    <span>Sadness</span>
+                    <span>📉</span>
+                    <span>Cautious</span>
                 </button>
                 <button class="filter-btn" data-emotion="hope">
-                    <span>🟢</span>
-                    <span>Hope</span>
+                    <span>📈</span>
+                    <span>Optimistic</span>
                 </button>
                 <button class="filter-btn" data-emotion="calmness">
-                    <span>😌</span>
-                    <span>Calm</span>
+                    <span>⚪</span>
+                    <span>Neutral</span>
                 </button>
             </div>
 
-            <div class="hint-text">Drag to rotate • Scroll to zoom</div>
+            <div class="hint-text">Drag to rotate • Scroll to zoom • Click for details</div>
         </div>
     </div>
 
@@ -126,21 +126,21 @@
         </div>
 
         <div class="drawer-section">
-            <div class="section-title">Emotion Breakdown</div>
+            <div class="section-title">Market Sentiment Breakdown</div>
             <div class="emotion-breakdown" id="emotionBreakdown">
                 <!-- Populated by dashboard.js -->
             </div>
         </div>
 
         <div class="drawer-section">
-            <div class="section-title">Trending Topics</div>
+            <div class="section-title">Trending Tickers & Topics</div>
             <div class="keywords-container" id="keywordsContainer">
                 <!-- Populated by dashboard.js -->
             </div>
         </div>
 
         <div class="drawer-section">
-            <div class="section-title">Recent Voices</div>
+            <div class="section-title">Recent Market Chatter</div>
             <div class="posts-container" id="postsContainer">
                 <!-- Populated by dashboard.js -->
             </div>
