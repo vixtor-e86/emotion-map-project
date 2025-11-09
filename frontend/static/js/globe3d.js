@@ -1,19 +1,14 @@
 /* ============================================
-   EMOTION MAP - 3D GLOBE WITH LABELS
-   No external dependencies - works offline!
+   MULTI-SECTOR GLOBE 3D - FIXED
+   3D Globe with sector-aware emotion configs
    ============================================ */
 
 let globe = null;
-let currentMapData = [];
 
 /* ============================================
    GLOBE INITIALIZATION
    ============================================ */
 
-/**
- * Initialize the 3D globe with emotion labels
- * @param {Array} mapData - Array of emotion data points from API
- */
 function initGlobe(mapData = []) {
     const container = document.getElementById('globe-container');
     
@@ -23,46 +18,50 @@ function initGlobe(mapData = []) {
     }
 
     console.log('🌍 Initializing globe with', mapData.length, 'data points');
-    currentMapData = mapData;
+    window.currentMapData = mapData;
     
-    // Get emotion config
-    const EMOTION_CONFIG = window.EmotionMapAPI.EMOTION_CONFIG;
-    
-    // Initialize Globe.gl with LABELS - Simple and reliable!
+    // Initialize Globe.gl with LABELS
     globe = Globe()
-        // Globe textures
         .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
         .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
         .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
         
-        // LABELS - Show country names with colored backgrounds
-        .labelsData(currentMapData)
+        // LABELS
+        .labelsData(mapData)
         .labelLat(d => d.lat)
         .labelLng(d => d.lng)
         .labelText(d => d.country)
         .labelSize(d => {
-            // Size based on post count
             const size = Math.log(d.posts + 1) * 0.5;
             return Math.max(size, 0.5);
         })
         .labelDotRadius(d => {
-            // Dot size based on intensity
             return (d.intensity || 0.5) * 0.8;
         })
         .labelColor(d => {
-            const config = EMOTION_CONFIG[d.emotion];
-            return config ? config.color : '#00A8FF';
+            // SAFE: Use multi-sector emotion config
+            try {
+                const config = window.EmotionMapAPI.getEmotionConfig(d.emotion);
+                return config ? config.color : '#94a3b8';
+            } catch (e) {
+                console.warn('Error getting color for', d.emotion, e);
+                return '#94a3b8';
+            }
         })
         .labelResolution(2)
         .labelAltitude(0.01)
         
-        // POINTS - Colored dots for each country
-        .pointsData(currentMapData)
+        // POINTS
+        .pointsData(mapData)
         .pointLat(d => d.lat)
         .pointLng(d => d.lng)
         .pointColor(d => {
-            const config = EMOTION_CONFIG[d.emotion];
-            return config ? config.color : '#00A8FF';
+            try {
+                const config = window.EmotionMapAPI.getEmotionConfig(d.emotion);
+                return config ? config.color : '#94a3b8';
+            } catch (e) {
+                return '#94a3b8';
+            }
         })
         .pointAltitude(d => (d.intensity || 0.5) * 0.15)
         .pointRadius(d => {
@@ -70,7 +69,20 @@ function initGlobe(mapData = []) {
             return Math.log(posts + 1) * 0.3;
         })
         .pointLabel(d => {
-            const config = EMOTION_CONFIG[d.emotion];
+            // SAFE: Get emotion config with fallback
+            let config, emoji, label, color;
+            try {
+                config = window.EmotionMapAPI.getEmotionConfig(d.emotion);
+                emoji = config ? config.emoji : '⚪';
+                label = config ? config.label : d.emotion;
+                color = config ? config.color : '#94a3b8';
+            } catch (e) {
+                console.warn('Error getting config for', d.emotion, e);
+                emoji = '⚪';
+                label = d.emotion || 'Unknown';
+                color = '#94a3b8';
+            }
+            
             const intensity = Math.round((d.intensity || 0) * 100);
             
             return `
@@ -81,14 +93,14 @@ function initGlobe(mapData = []) {
                     color: white; 
                     font-size: 14px;
                     font-family: 'Inter', sans-serif;
-                    border: 2px solid ${config ? config.color : '#00A8FF'};
+                    border: 2px solid ${color};
                     min-width: 180px;
                 ">
                     <div style="font-weight: 700; margin-bottom: 8px; font-size: 16px;">
-                        ${config ? config.emoji : '🌍'} ${d.country}
+                        ${emoji} ${d.country}
                     </div>
                     <div style="color: #a0a0a0; font-size: 13px;">
-                        <strong style="color: ${config ? config.color : '#00A8FF'};">${config ? config.label : 'Unknown'}</strong><br/>
+                        <strong style="color: ${color};">${label}</strong><br/>
                         Intensity: ${intensity}%<br/>
                         ${d.posts.toLocaleString()} posts
                     </div>
@@ -99,24 +111,27 @@ function initGlobe(mapData = []) {
             handleCountryClick(point);
         })
         
-        // RINGS - Add pulsing rings around high-activity countries
-        .ringsData(currentMapData.filter(d => d.posts > 100))
+        // RINGS
+        .ringsData(mapData.filter(d => d.posts > 10))
         .ringLat(d => d.lat)
         .ringLng(d => d.lng)
         .ringMaxRadius(d => Math.log(d.posts + 1) * 0.5)
         .ringPropagationSpeed(2)
         .ringRepeatPeriod(d => 2000 + Math.random() * 1000)
         .ringColor(d => {
-            const config = EMOTION_CONFIG[d.emotion];
-            return () => config ? config.color : '#00A8FF';
+            try {
+                const config = window.EmotionMapAPI.getEmotionConfig(d.emotion);
+                return () => config ? config.color : '#94a3b8';
+            } catch (e) {
+                return () => '#94a3b8';
+            }
         })
         
         (container);
 
-    // Globe controls configuration
     setupGlobeControls();
     
-    console.log('✅ Globe initialized with labels and points (no external files needed!)');
+    console.log('✅ Globe initialized with multi-sector support');
 }
 
 /* ============================================
@@ -163,12 +178,12 @@ function updateGlobeData(mapData) {
         return;
     }
 
-    currentMapData = mapData;
+    window.currentMapData = mapData;
     
     // Update all layers
     globe.labelsData(mapData);
     globe.pointsData(mapData);
-    globe.ringsData(mapData.filter(d => d.posts > 100));
+    globe.ringsData(mapData.filter(d => d.posts > 10));
     
     console.log('🔄 Globe updated with', mapData.length, 'data points');
 }
@@ -176,10 +191,10 @@ function updateGlobeData(mapData) {
 function filterGlobeByEmotion(activeFilters) {
     if (!globe) return;
 
-    let filteredData = currentMapData;
+    let filteredData = window.currentMapData;
     
     if (activeFilters && activeFilters.length > 0) {
-        filteredData = currentMapData.filter(point => 
+        filteredData = window.currentMapData.filter(point => 
             activeFilters.includes(point.emotion)
         );
         console.log('🎯 Filtered to', filteredData.length, 'countries with emotions:', activeFilters);
@@ -190,7 +205,7 @@ function filterGlobeByEmotion(activeFilters) {
     // Update all layers with filtered data
     globe.labelsData(filteredData);
     globe.pointsData(filteredData);
-    globe.ringsData(filteredData.filter(d => d.posts > 100));
+    globe.ringsData(filteredData.filter(d => d.posts > 10));
 }
 
 /* ============================================
@@ -203,8 +218,9 @@ function handleCountryClick(point) {
     const country = point.country;
     console.log('🖱️ Clicked country:', country);
     
-    if (typeof openRegionDrawer === 'function') {
-        openRegionDrawer(country);
+    // SAFE: Check if function exists
+    if (typeof window.openRegionDrawer === 'function') {
+        window.openRegionDrawer(country);
     } else {
         console.warn('⚠️ openRegionDrawer function not found');
     }
@@ -227,7 +243,7 @@ function getGlobe() {
 function destroyGlobe() {
     if (globe) {
         globe = null;
-        currentMapData = [];
+        window.currentMapData = [];
         console.log('🗑️ Globe destroyed');
     }
 }
@@ -246,4 +262,4 @@ window.EmotionMapGlobe = {
     destroyGlobe
 };
 
-console.log('✅ Globe3D module loaded (Labels + Points + Rings)');
+console.log('✅ Multi-Sector Globe3D module loaded');

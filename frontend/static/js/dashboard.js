@@ -1,36 +1,38 @@
 /* ============================================
-   EMOTION MAP - DASHBOARD LOGIC
-   Main application controller
+   MULTI-SECTOR DASHBOARD LOGIC
+   Handles sector switching and UI updates
    ============================================ */
 
-// Global state
-let activeFilters = [];
-let searchTimeout = null;
+// Global state - DECLARE ONCE ONLY
+window.currentSector = 'finance';
+window.activeFilters = [];
+window.searchTimeout = null;
+window.currentMapData = [];
 
 /* ============================================
    INITIALIZATION
    ============================================ */
 
-/**
- * Initialize the entire dashboard
- */
 async function initialize() {
-    console.log('🚀 Initializing Emotion Map Dashboard...');
+    console.log('🚀 Initializing Multi-Sector Dashboard...');
     
     try {
         // Check backend health
         await window.EmotionMapAPI.checkHealth();
         
-        // Fetch initial data
-        const stats = await window.EmotionMapAPI.fetchGlobalStats();
-        const mapData = await window.EmotionMapAPI.fetchMapData();
+        // Fetch initial data for finance sector
+        const stats = await window.EmotionMapAPI.fetchGlobalStats('finance');
+        const mapData = await window.EmotionMapAPI.fetchMapData('country', 'finance');
         
-        // Update UI components
+        // Update UI
         updateGlobalStats(stats);
+        updateEmotionFilterLabels('finance');
+        updateSectorDescription('finance');
         updateTime();
         
-        // Initialize 3D globe
+        // Initialize globe
         window.EmotionMapGlobe.initGlobe(mapData);
+        window.currentMapData = mapData;
         
         // Setup event listeners
         setupEventListeners();
@@ -38,18 +40,103 @@ async function initialize() {
         // Start periodic updates
         startPeriodicUpdates();
         
-        // Hide loading overlay
+        // Hide loading
         setTimeout(() => {
             document.getElementById('loadingOverlay').classList.add('hidden');
         }, 2000);
         
-        console.log('✅ Dashboard initialized successfully!');
-        console.log('💡 TIP: Click any hexagon to see region details');
+        console.log('✅ Dashboard initialized!');
         
     } catch (error) {
         console.error('❌ Initialization failed:', error);
-        document.getElementById('loadingOverlay').querySelector('.loading-text').textContent = 
-            'Failed to load. Check if backend is running.';
+    }
+}
+
+/* ============================================
+   SECTOR SWITCHING
+   ============================================ */
+
+async function switchSector(newSector) {
+    console.log(`🔄 Switching to ${newSector} sector...`);
+    
+    // Update global state
+    window.currentSector = newSector;
+    
+    // Update active tab
+    document.querySelectorAll('.sector-tab').forEach(tab => {
+        if (tab.dataset.sector === newSector) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+    
+    // Update emotion filter labels
+    updateEmotionFilterLabels(newSector);
+    
+    // Update sector description
+    updateSectorDescription(newSector);
+    
+    // Fetch new data
+    const [stats, mapData] = await Promise.all([
+        window.EmotionMapAPI.fetchGlobalStats(newSector),
+        window.EmotionMapAPI.fetchMapData('country', newSector)
+    ]);
+    
+    // Update UI
+    updateGlobalStats(stats);
+    window.EmotionMapGlobe.updateGlobeData(mapData);
+    window.currentMapData = mapData;
+    
+    // Clear active filters
+    window.activeFilters = [];
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    console.log(`✅ Switched to ${newSector}`);
+}
+
+function updateEmotionFilterLabels(sector) {
+    const configs = window.EmotionMapAPI.getAllEmotionConfigs();
+    
+    const joyBtn = document.getElementById('filterJoy');
+    const hopeBtn = document.getElementById('filterHope');
+    const calmnessBtn = document.getElementById('filterCalmness');
+    const sadnessBtn = document.getElementById('filterSadness');
+    const angerBtn = document.getElementById('filterAnger');
+    
+    if (joyBtn) {
+        joyBtn.querySelector('.filter-emoji').textContent = configs.joy.emoji;
+        joyBtn.querySelector('.filter-label-text').textContent = configs.joy.label;
+    }
+    
+    if (hopeBtn) {
+        hopeBtn.querySelector('.filter-emoji').textContent = configs.hope.emoji;
+        hopeBtn.querySelector('.filter-label-text').textContent = configs.hope.label;
+    }
+    
+    if (calmnessBtn) {
+        calmnessBtn.querySelector('.filter-emoji').textContent = configs.calmness.emoji;
+        calmnessBtn.querySelector('.filter-label-text').textContent = configs.calmness.label;
+    }
+    
+    if (sadnessBtn) {
+        sadnessBtn.querySelector('.filter-emoji').textContent = configs.sadness.emoji;
+        sadnessBtn.querySelector('.filter-label-text').textContent = configs.sadness.label;
+    }
+    
+    if (angerBtn) {
+        angerBtn.querySelector('.filter-emoji').textContent = configs.anger.emoji;
+        angerBtn.querySelector('.filter-label-text').textContent = configs.anger.label;
+    }
+}
+
+function updateSectorDescription(sector) {
+    const sectorInfo = window.EmotionMapAPI.getSectorInfo(sector);
+    const descEl = document.getElementById('sectorDescription');
+    if (descEl) {
+        descEl.textContent = sectorInfo.description;
     }
 }
 
@@ -57,24 +144,16 @@ async function initialize() {
    UI UPDATE FUNCTIONS
    ============================================ */
 
-/**
- * Update global emotion statistics in top bar
- * @param {Object} stats - Emotion percentages from API
- */
 function updateGlobalStats(stats) {
     const container = document.getElementById('emotionStats');
     if (!container) return;
     
     container.innerHTML = '';
     
-    // Ensure we have valid numbers
     const emotions = ['joy', 'anger', 'sadness', 'hope', 'calmness'];
     
     emotions.forEach(emotion => {
-        const config = window.EmotionMapAPI.EMOTION_CONFIG[emotion];
-        if (!config) return;
-        
-        // Get value, default to 0 if not present
+        const config = window.EmotionMapAPI.getEmotionConfig(emotion);
         const value = stats[emotion] || 0;
         
         const statDiv = document.createElement('div');
@@ -86,12 +165,9 @@ function updateGlobalStats(stats) {
         container.appendChild(statDiv);
     });
     
-    console.log('📊 Updated global stats:', stats);
+    console.log('📊 Updated global stats');
 }
 
-/**
- * Update current time display
- */
 function updateTime() {
     const timeDisplay = document.getElementById('timeDisplay');
     if (!timeDisplay) return;
@@ -104,23 +180,26 @@ function updateTime() {
 }
 
 /* ============================================
-   REGION DRAWER FUNCTIONS
+   REGION DRAWER
    ============================================ */
 
-/**
- * Open region details drawer
- * @param {String} country - Country name
- */
 async function openRegionDrawer(country) {
     const drawer = document.getElementById('regionDrawer');
     if (!drawer) return;
     
-    // Fetch location details from API
     const data = await window.EmotionMapAPI.fetchLocationDetails(country);
     
-    // Update drawer title
+    // Update title
     document.getElementById('drawerTitle').textContent = data.country || country;
     document.getElementById('drawerSubtitle').textContent = data.region || '';
+    
+    // Update sector badge
+    const badge = document.getElementById('drawerSectorBadge');
+    if (badge) {
+        const sectorInfo = window.EmotionMapAPI.getSectorInfo(data.sector || window.currentSector);
+        badge.innerHTML = `${sectorInfo.icon} ${sectorInfo.name}`;
+        badge.setAttribute('data-sector', data.sector || window.currentSector);
+    }
     
     // Update emotion breakdown
     updateEmotionBreakdown(data.emotions || {});
@@ -128,7 +207,7 @@ async function openRegionDrawer(country) {
     // Update keywords
     updateKeywords(data.keywords || []);
     
-    // Update sample posts
+    // Update posts
     updatePosts(data.posts || []);
     
     // Open drawer
@@ -137,9 +216,6 @@ async function openRegionDrawer(country) {
     console.log('📂 Opened drawer for:', country);
 }
 
-/**
- * Close region drawer
- */
 function closeRegionDrawer() {
     const drawer = document.getElementById('regionDrawer');
     if (drawer) {
@@ -147,21 +223,16 @@ function closeRegionDrawer() {
     }
 }
 
-/**
- * Update emotion breakdown bars in drawer
- */
 function updateEmotionBreakdown(emotions) {
     const container = document.getElementById('emotionBreakdown');
     if (!container) return;
     
     container.innerHTML = '';
     
-    // Sort emotions by value (highest first)
     Object.entries(emotions)
         .sort((a, b) => b[1] - a[1])
         .forEach(([emotion, value]) => {
-            const config = window.EmotionMapAPI.EMOTION_CONFIG[emotion];
-            if (!config) return;
+            const config = window.EmotionMapAPI.getEmotionConfig(emotion);
             
             const item = document.createElement('div');
             item.className = 'emotion-item';
@@ -181,9 +252,6 @@ function updateEmotionBreakdown(emotions) {
         });
 }
 
-/**
- * Update trending keywords in drawer
- */
 function updateKeywords(keywords) {
     const container = document.getElementById('keywordsContainer');
     if (!container) return;
@@ -198,9 +266,6 @@ function updateKeywords(keywords) {
     });
 }
 
-/**
- * Update sample posts in drawer
- */
 function updatePosts(posts) {
     const container = document.getElementById('postsContainer');
     if (!container) return;
@@ -224,69 +289,66 @@ function updatePosts(posts) {
    EVENT LISTENERS
    ============================================ */
 
-/**
- * Setup all event listeners
- */
 function setupEventListeners() {
-    // Close drawer button
+    // Sector tabs
+    document.querySelectorAll('.sector-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const sector = tab.dataset.sector;
+            switchSector(sector);
+        });
+    });
+    
+    // Close drawer
     const closeBtn = document.getElementById('closeDrawer');
     if (closeBtn) {
         closeBtn.addEventListener('click', closeRegionDrawer);
     }
-
+    
     // Refresh button
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', handleRefresh);
     }
-
-    // Search input
+    
+    // Search
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
         searchInput.addEventListener('input', handleSearch);
     }
-
-    // Filter buttons
+    
+    // Filters
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => handleFilterClick(btn));
     });
-
+    
     // Keyboard shortcuts
     document.addEventListener('keydown', handleKeyboard);
 }
 
-/**
- * Handle refresh button click
- */
 async function handleRefresh() {
     const btn = document.getElementById('refreshBtn');
     if (!btn) return;
     
-    // Animate button
     btn.style.transform = 'rotate(360deg)';
     
     console.log('🔄 Refreshing data...');
     
-    // Fetch fresh data
     const result = await window.EmotionMapAPI.refreshData();
     
     if (result) {
         updateGlobalStats(result.stats);
         window.EmotionMapGlobe.updateGlobeData(result.mapData);
+        window.currentMapData = result.mapData;
         updateTime();
     }
     
-    // Reset button animation
     setTimeout(() => {
         btn.style.transform = 'rotate(0deg)';
     }, 500);
 }
 
-/**
- * Handle search input with autocomplete
- */
 function handleSearch(e) {
-    clearTimeout(searchTimeout);
+    clearTimeout(window.searchTimeout);
     
     const query = e.target.value.trim();
     const suggestionsContainer = document.getElementById('searchSuggestions');
@@ -296,18 +358,16 @@ function handleSearch(e) {
         return;
     }
     
-    // Show suggestions as user types
-    const suggestions = currentMapData
+    const suggestions = window.currentMapData
         .filter(country => country.country.toLowerCase().includes(query.toLowerCase()))
-        .slice(0, 5); // Show max 5 suggestions
+        .slice(0, 5);
     
     if (suggestionsContainer && suggestions.length > 0) {
-        const EMOTION_CONFIG = window.EmotionMapAPI.EMOTION_CONFIG;
         suggestionsContainer.innerHTML = suggestions.map(country => {
-            const config = EMOTION_CONFIG[country.emotion];
+            const config = window.EmotionMapAPI.getEmotionConfig(country.emotion);
             return `
                 <div class="search-suggestion" data-lat="${country.lat}" data-lng="${country.lng}" data-country="${country.country}">
-                    <span style="font-size: 1.2rem; margin-right: 0.5rem;">${config ? config.emoji : '🌍'}</span>
+                    <span style="font-size: 1.2rem; margin-right: 0.5rem;">${config.emoji}</span>
                     <span style="flex: 1;">${country.country}</span>
                     <span style="font-size: 0.8rem; color: #666;">${country.posts} posts</span>
                 </div>
@@ -315,92 +375,56 @@ function handleSearch(e) {
         }).join('');
         suggestionsContainer.style.display = 'block';
         
-        // Add click handlers to suggestions
         document.querySelectorAll('.search-suggestion').forEach(item => {
             item.addEventListener('click', () => {
                 const lat = parseFloat(item.dataset.lat);
                 const lng = parseFloat(item.dataset.lng);
                 const country = item.dataset.country;
                 
-                // Fly to country
                 window.EmotionMapGlobe.flyToLocation(lat, lng, 1.5);
-                
-                // Clear search and hide suggestions
                 e.target.value = country;
                 suggestionsContainer.style.display = 'none';
-                
-                // Open drawer
                 setTimeout(() => openRegionDrawer(country), 1200);
             });
         });
     } else if (suggestionsContainer) {
         suggestionsContainer.style.display = 'none';
     }
-    
-    searchTimeout = setTimeout(async () => {
-        console.log('🔍 Searching for:', query);
-        
-        const matchingCountry = currentMapData.find(country => 
-            country.country.toLowerCase() === query.toLowerCase()
-        );
-        
-        if (matchingCountry) {
-            console.log('✓ Found country:', matchingCountry.country);
-            
-            window.EmotionMapGlobe.flyToLocation(
-                matchingCountry.lat, 
-                matchingCountry.lng, 
-                1.5
-            );
-            
-            setTimeout(() => openRegionDrawer(matchingCountry.country), 1200);
-            
-            e.target.style.borderColor = '#00E676';
-            setTimeout(() => { e.target.style.borderColor = ''; }, 2000);
-            
-        } else {
-            console.log('❌ No results found for:', query);
-            e.target.style.borderColor = '#FF3B5C';
-            setTimeout(() => { e.target.style.borderColor = ''; }, 2000);
-        }
-    }, 800);
 }
 
-/**
- * Handle emotion filter button click
- */
 function handleFilterClick(btn) {
     const emotion = btn.dataset.emotion;
     
-    if (activeFilters.includes(emotion)) {
-        // Remove filter
-        activeFilters = activeFilters.filter(e => e !== emotion);
+    if (window.activeFilters.includes(emotion)) {
+        window.activeFilters = window.activeFilters.filter(e => e !== emotion);
         btn.classList.remove('active');
     } else {
-        // Add filter
-        activeFilters.push(emotion);
+        window.activeFilters.push(emotion);
         btn.classList.add('active');
     }
     
-    // Update globe with filtered data
-    window.EmotionMapGlobe.filterGlobeByEmotion(activeFilters);
+    window.EmotionMapGlobe.filterGlobeByEmotion(window.activeFilters);
     
-    console.log('🎯 Active filters:', activeFilters);
+    console.log('🎯 Active filters:', window.activeFilters);
 }
 
-/**
- * Handle keyboard shortcuts
- */
 function handleKeyboard(e) {
-    // Press Space to toggle rotation
     if (e.code === 'Space') {
         e.preventDefault();
         window.EmotionMapGlobe.toggleRotation();
     }
     
-    // Press Escape to close drawer
     if (e.code === 'Escape') {
         closeRegionDrawer();
+    }
+    
+    // Sector shortcuts: 1-4
+    if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code)) {
+        const sectors = ['finance', 'health', 'technology', 'sports'];
+        const index = parseInt(e.code.replace('Digit', '')) - 1;
+        if (sectors[index]) {
+            switchSector(sectors[index]);
+        }
     }
 }
 
@@ -408,36 +432,30 @@ function handleKeyboard(e) {
    PERIODIC UPDATES
    ============================================ */
 
-/**
- * Start periodic data updates
- */
 function startPeriodicUpdates() {
-    // Update time every minute
     setInterval(updateTime, 60000);
     
-    // Auto-refresh data every 60 minutes (backend refreshes every 60 min)
     setInterval(async () => {
         console.log('⏰ Auto-refresh triggered');
         const result = await window.EmotionMapAPI.refreshData();
         if (result) {
             updateGlobalStats(result.stats);
             window.EmotionMapGlobe.updateGlobeData(result.mapData);
+            window.currentMapData = result.mapData;
         }
-    }, 3600000); // 60 minutes in milliseconds
+    }, 3600000); // 60 minutes
 }
 
 /* ============================================
-   EXPOSE FUNCTIONS GLOBALLY
+   EXPORT TO WINDOW
    ============================================ */
 
-// Make drawer function available to globe3d.js
 window.openRegionDrawer = openRegionDrawer;
 
 /* ============================================
    START APPLICATION
    ============================================ */
 
-// Initialize when page loads
 window.addEventListener('load', initialize);
 
-console.log('📱 Dashboard script loaded');
+console.log('📱 Multi-Sector Dashboard script loaded');

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FinancePulse - Real-Time Market Sentiment Intelligence</title>
+    <title>SectorPulse - Multi-Sector Intelligence Platform</title>
     <style>
         * {
             margin: 0;
@@ -12,11 +12,10 @@
         }
 
         :root {
-            --joy: #FFD600;
-            --anger: #FF3B5C;
-            --sadness: #9B59B6;
-            --hope: #00E676;
-            --calmness: #00A8FF;
+            --finance: #10b981;
+            --health: #3b82f6;
+            --technology: #8b5cf6;
+            --sports: #f59e0b;
             --bg-dark: #0B0C14;
             --bg-secondary: #1A1D2E;
             --accent-cyan: #00D9FF;
@@ -55,7 +54,6 @@
             50% { opacity: 1; }
         }
 
-        /* Container */
         .container {
             position: relative;
             z-index: 1;
@@ -131,7 +129,7 @@
         /* Hero Section */
         .hero {
             text-align: center;
-            padding: 6rem 0 4rem;
+            padding: 4rem 0 3rem;
         }
 
         .hero h1 {
@@ -141,6 +139,7 @@
             margin-bottom: 1.5rem;
             background: linear-gradient(135deg, white, var(--accent-cyan));
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
@@ -148,7 +147,7 @@
         .hero p {
             font-size: 1.25rem;
             color: #a0a0a0;
-            max-width: 600px;
+            max-width: 700px;
             margin: 0 auto 3rem;
             line-height: 1.6;
         }
@@ -180,41 +179,49 @@
             height: 20px;
         }
 
-        /* Emotion Showcase */
-        .emotions-showcase {
-            display: flex;
-            justify-content: center;
+        /* Sector Showcase - Updated! */
+        .sectors-showcase {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 2rem;
             margin: 4rem 0;
-            flex-wrap: wrap;
         }
 
-        .emotion-card {
-            padding: 1.5rem 2rem;
+        .sector-card {
+            padding: 2rem;
             border-radius: 20px;
             background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
-            transition: all 0.3s ease;
-            min-width: 150px;
+            transition: all 0.4s ease;
             text-align: center;
+            cursor: pointer;
         }
 
-        .emotion-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--emotion-color);
-            box-shadow: 0 10px 30px var(--emotion-glow);
+        .sector-card:hover {
+            transform: translateY(-10px);
+            border-color: var(--sector-color);
+            box-shadow: 0 15px 40px var(--sector-glow);
+            background: rgba(255, 255, 255, 0.05);
         }
 
-        .emotion-icon {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
+        .sector-icon {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            display: block;
         }
 
-        .emotion-label {
-            font-size: 1rem;
-            font-weight: 600;
-            color: #ccc;
+        .sector-name {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            color: white;
+        }
+
+        .sector-description {
+            font-size: 0.95rem;
+            color: #a0a0a0;
+            line-height: 1.5;
         }
 
         /* Features Section */
@@ -284,7 +291,8 @@
                 font-size: 1rem;
             }
 
-            .emotions-showcase {
+            .sectors-showcase {
+                grid-template-columns: 1fr;
                 gap: 1rem;
             }
 
@@ -298,66 +306,33 @@
             }
         }
 
-        /* Floating globe animation */
-        .globe-preview {
-            width: 300px;
-            height: 300px;
-            margin: 2rem auto;
-            position: relative;
-            animation: float 6s ease-in-out infinite;
+        /* Stats bar */
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 3rem;
+            margin: 3rem 0;
+            flex-wrap: wrap;
         }
 
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-20px); }
+        .stat-item {
+            text-align: center;
         }
 
-        .globe-circle {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: radial-gradient(circle at 30% 30%, rgba(0, 217, 255, 0.2), rgba(123, 47, 247, 0.1));
-            border: 2px solid rgba(0, 217, 255, 0.3);
-            position: relative;
-            overflow: hidden;
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: block;
         }
 
-        .globe-circle::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 80%;
-            height: 80%;
-            border-radius: 50%;
-            border: 1px solid rgba(0, 217, 255, 0.2);
-            animation: rotate 20s linear infinite;
+        .stat-label {
+            font-size: 0.9rem;
+            color: #a0a0a0;
+            margin-top: 0.5rem;
         }
-
-        @keyframes rotate {
-            from { transform: translate(-50%, -50%) rotate(0deg); }
-            to { transform: translate(-50%, -50%) rotate(360deg); }
-        }
-
-        .emotion-dot {
-            position: absolute;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            animation: glow 2s ease-in-out infinite;
-        }
-
-        @keyframes glow {
-            0%, 100% { opacity: 0.6; }
-            50% { opacity: 1; box-shadow: 0 0 20px currentColor; }
-        }
-
-        .dot-1 { top: 30%; left: 40%; background: var(--joy); }
-        .dot-2 { top: 60%; left: 70%; background: var(--anger); }
-        .dot-3 { top: 50%; left: 20%; background: var(--hope); }
-        .dot-4 { top: 70%; left: 50%; background: var(--calmness); }
-        .dot-5 { top: 40%; left: 75%; background: var(--sadness); }
     </style>
 </head>
 <body>
@@ -369,7 +344,7 @@
         <header>
             <div class="logo">
                 <div class="logo-icon"></div>
-                <div class="logo-text">FinancePulse 📈</div>
+                <div class="logo-text">SectorPulse</div>
             </div>
 
             <a href="https://github.com/vixtor-e86/emotion-map-project" target="_blank" class="nav-btn">
@@ -382,54 +357,79 @@
 
         <!-- Hero Section -->
         <section class="hero">
-            <h1>Track Global<br/>Market Sentiment</h1>
+            <h1>Real-Time<br/>Multi-Sector Intelligence</h1>
             <p>
-                Real-time market psychology analysis across 46 countries. 
-                Identify bullish and bearish signals before they hit mainstream media.
+                Track global sentiment across Finance, Health, Technology, and Sports. 
+                AI-powered analysis of emotions, trends, and insights from 40+ countries 
+                updated every hour.
             </p>
 
-            <!-- Globe Preview -->
-            <div class="globe-preview">
-                <div class="globe-circle">
-                    <div class="emotion-dot dot-1"></div>
-                    <div class="emotion-dot dot-2"></div>
-                    <div class="emotion-dot dot-3"></div>
-                    <div class="emotion-dot dot-4"></div>
-                    <div class="emotion-dot dot-5"></div>
-                </div>
-            </div>
-
             <a href="/dashboard" class="cta-button">
-                View Market Intelligence
+                Launch Dashboard
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M5 12h14M12 5l7 7-7 7"/>
                 </svg>
             </a>
+
+            <!-- Stats Bar -->
+            <div class="stats-bar">
+                <div class="stat-item">
+                    <span class="stat-number">4</span>
+                    <div class="stat-label">Sectors</div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">40+</span>
+                    <div class="stat-label">Countries</div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">60min</span>
+                    <div class="stat-label">Update Cycle</div>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">85%+</span>
+                    <div class="stat-label">Accuracy</div>
+                </div>
+            </div>
         </section>
 
-        <!-- Emotion Showcase -->
-        <div class="emotions-showcase">
-            <div class="emotion-card" style="--emotion-color: #10b981;">
-                <div class="emotion-icon">🟢</div>
-                <div class="emotion-label">Strong Bullish</div>
+        <!-- Sector Showcase - NEW! -->
+        <div class="sectors-showcase">
+            <div class="sector-card" style="--sector-color: #10b981; --sector-glow: rgba(16, 185, 129, 0.3);">
+                <span class="sector-icon">💰</span>
+                <div class="sector-name">Finance</div>
+                <div class="sector-description">
+                    Real-time market sentiment. Track bullish and bearish signals across 
+                    stocks, crypto, and global markets.
+                </div>
             </div>
-            <div class="emotion-card" style="--emotion-color: #34d399;">
-                <div class="emotion-icon">📈</div>
-                <div class="emotion-label">Optimistic</div>
+
+            <div class="sector-card" style="--sector-color: #3b82f6; --sector-glow: rgba(59, 130, 246, 0.3);">
+                <span class="sector-icon">🏥</span>
+                <div class="sector-name">Health</div>
+                <div class="sector-description">
+                    Healthcare insights. Monitor wellness trends, disease outbreaks, 
+                    and public health sentiment worldwide.
+                </div>
             </div>
-            <div class="emotion-card" style="--emotion-color: #94a3b8;">
-                <div class="emotion-icon">⚪</div>
-                <div class="emotion-label">Neutral</div>
+
+            <div class="sector-card" style="--sector-color: #8b5cf6; --sector-glow: rgba(139, 92, 246, 0.3);">
+                <span class="sector-icon">💻</span>
+                <div class="sector-name">Technology</div>
+                <div class="sector-description">
+                    Tech innovation tracker. Discover breakthroughs, product launches, 
+                    and digital transformation trends.
+                </div>
             </div>
-            <div class="emotion-card" style="--emotion-color: #f87171;">
-                <div class="emotion-icon">📉</div>
-                <div class="emotion-label">Cautious</div>
+
+            <div class="sector-card" style="--sector-color: #f59e0b; --sector-glow: rgba(245, 158, 11, 0.3);">
+                <span class="sector-icon">⚽</span>
+                <div class="sector-name">Sports</div>
+                <div class="sector-description">
+                    Fan sentiment analysis. Track excitement, disappointment, and 
+                    passion across football, basketball, and more.
+                </div>
             </div>
-            <div class="emotion-card" style="--emotion-color: #ef4444;">
-                <div class="emotion-icon">🔴</div>
-                <div class="emotion-label">Strong Bearish</div>
-            </div>
-        </div>  
+        </div>
 
         <!-- Features Section -->
         <div class="features">
@@ -440,10 +440,10 @@
                         <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                     </svg>
                 </div>
-                <h3>Market Psychology</h3>
+                <h3>AI-Powered Analysis</h3>
                 <p>
-                    Real-time sentiment analysis of stocks, crypto, and markets powered by AI. 
-                    Track bullish and bearish sentiment across global financial discussions.
+                    Advanced emotion detection using state-of-the-art transformer models. 
+                    85%+ accuracy across multiple languages and contexts.
                 </p>
             </div>
 
@@ -457,8 +457,8 @@
                 </div>
                 <h3>Interactive 3D Globe</h3>
                 <p>
-                    Spin, zoom, and explore a beautiful 3D visualization of global emotions. 
-                    Click any region to dive deeper into local sentiment.
+                    Stunning visualization of global sentiment. Switch between sectors 
+                    and see emotions shift across continents in real-time.
                 </p>
             </div>
 
@@ -469,17 +469,17 @@
                         <polyline points="9 22 9 12 15 12 15 22"/>
                     </svg>
                 </div>
-                <h3>Actionable Signals</h3>
+                <h3>Actionable Insights</h3>
                 <p>
-                    Identify market opportunities before they go mainstream. Track trending tickers, 
-                    sentiment shifts, and get early signals for your trading strategy.
+                    From market signals to health alerts, sports predictions to tech trends. 
+                    Make informed decisions with data-driven intelligence.
                 </p>
             </div>
         </div>
 
         <!-- Footer -->
         <footer>
-            <p>© 2025 FinancePulse. Market Sentiment Intelligence Platform.</p>
+            <p>© 2025 SectorPulse. Multi-Sector Intelligence Platform.</p>
         </footer>
     </div>
 
@@ -495,7 +495,7 @@
             starsContainer.appendChild(star);
         }
 
-        // Smooth scroll to sections
+        // Smooth scroll
         document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             anchor.addEventListener('click', function (e) {
                 e.preventDefault();

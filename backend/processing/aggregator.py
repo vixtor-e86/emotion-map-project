@@ -1,13 +1,13 @@
 """
-aggregator.py
--------------
-Aggregates emotion data by location and geocodes ONCE per location.
+aggregator.py (MULTI-SECTOR EDITION)
+-------------------------------------
+Aggregates emotion data by location AND SECTOR with geocoding.
 Creates data for the 3D globe visualization with zoom levels:
 - continent: 6 points (Africa, Asia, Europe, etc.)
 - country: 40+ points (Nigeria, USA, France, etc.)
 - city: 100+ points (Lagos, New York, Paris, etc.)
 
-FIXED: Now properly handles database updates (no duplicate rows!)
+NOW WITH SECTOR SUPPORT!
 
 Usage:
     python backend/processing/aggregator.py
@@ -32,7 +32,7 @@ except ImportError as e:
     sys.exit(1)
 
 # Initialize geolocator (used for geocoding)
-geolocator = Nominatim(user_agent="pulsenet_emotion_aggregator")
+geolocator = Nominatim(user_agent="sectorpulse_emotion_aggregator")
 
 # Cache for geocoded locations (to avoid repeat API calls)
 geocode_cache = {}
@@ -85,13 +85,13 @@ def get_coordinates(location_name: str, max_retries: int = 3):
 
 def aggregate_by_location(zoom_level: str = 'country'):
     """
-    Aggregate posts by location and calculate emotion statistics.
+    Aggregate posts by location AND SECTOR and calculate emotion statistics.
     
     Args:
         zoom_level: 'continent', 'country', or 'city'
     
     Returns:
-        dict: {location_name: {emotion_counts, total, dominant, avg_score, lat, lng}}
+        dict: {(location_name, sector): {emotion_counts, total, dominant, avg_score}}
     """
     conn = db.get_connection()
     cursor = conn.cursor()
@@ -104,21 +104,23 @@ def aggregate_by_location(zoom_level: str = 'country'):
     else:  # country (default)
         group_column = 'country'
     
-    # Query to get emotion counts by location
+    # Query to get emotion counts by location AND SECTOR
     cursor.execute(f'''
         SELECT 
             {group_column} as location,
+            sector,
             emotion,
             COUNT(*) as count,
             AVG(emotion_score) as avg_score
         FROM raw_posts
         WHERE {group_column} IS NOT NULL
         AND emotion IS NOT NULL
+        AND sector IS NOT NULL
         AND timestamp > datetime('now', '-24 hours')
-        GROUP BY {group_column}, emotion
+        GROUP BY {group_column}, sector, emotion
     ''')
     
-    # Build aggregation dictionary
+    # Build aggregation dictionary (KEY CHANGE: now includes sector!)
     aggregated = defaultdict(lambda: {
         'joy_count': 0,
         'anger_count': 0,
@@ -131,19 +133,23 @@ def aggregate_by_location(zoom_level: str = 'country'):
     
     for row in cursor.fetchall():
         location = row['location']
+        sector = row['sector']
         emotion = row['emotion']
         count = row['count']
         avg_score = row['avg_score']
         
+        # Create key with BOTH location and sector
+        key = (location, sector)
+        
         # Add counts
-        aggregated[location][f'{emotion}_count'] = count
-        aggregated[location]['total_posts'] += count
-        aggregated[location]['emotion_scores'].append(avg_score)
+        aggregated[key][f'{emotion}_count'] = count
+        aggregated[key]['total_posts'] += count
+        aggregated[key]['emotion_scores'].append(avg_score)
     
     conn.close()
     
     # Calculate dominant emotion and average score
-    for location, data in aggregated.items():
+    for key, data in aggregated.items():
         emotion_counts = {
             'joy': data['joy_count'],
             'anger': data['anger_count'],
@@ -186,16 +192,16 @@ def clear_old_aggregated_data(zoom_level: str = None):
 
 def save_aggregated_data(zoom_level: str, aggregated: dict, silent: bool = False):
     """
-    Save aggregated data to database with geocoding.
+    Save aggregated data to database with geocoding AND SECTOR.
     Uses INSERT OR REPLACE to avoid duplicates.
     
     Args:
         zoom_level: 'continent', 'country', or 'city'
-        aggregated: Dictionary of aggregated data
+        aggregated: Dictionary of aggregated data (now keyed by (location, sector))
         silent: If True, minimal output
     """
     if not silent:
-        print(f"\n📍 Geocoding {len(aggregated)} locations...")
+        print(f"\n📍 Geocoding {len(aggregated)} location+sector combinations...")
         print("-"*70)
     
     geocoded = 0
@@ -204,50 +210,61 @@ def save_aggregated_data(zoom_level: str, aggregated: dict, silent: bool = False
     conn = db.get_connection()
     cursor = conn.cursor()
     
-    for location_name, data in aggregated.items():
-        try:
-            # Geocode location
-            lat, lng = get_coordinates(location_name)
-            
-            if lat and lng:
-                geocoded += 1
-                status = "✓"
-            else:
+    # Group by sector for better logging
+    by_sector = defaultdict(list)
+    for (location, sector), data in aggregated.items():
+        by_sector[sector].append((location, data))
+    
+    for sector in sorted(by_sector.keys()):
+        if not silent:
+            icons = {'finance': '💰', 'health': '🏥', 'technology': '💻', 'sports': '⚽', 'general': '🌐'}
+            print(f"\n   {icons.get(sector, '📌')} {sector.upper()}")
+        
+        for location_name, data in by_sector[sector]:
+            try:
+                # Geocode location (once per location, cached)
+                lat, lng = get_coordinates(location_name)
+                
+                if lat and lng:
+                    geocoded += 1
+                    status = "✓"
+                else:
+                    failed += 1
+                    status = "✗"
+                    lat, lng = 0.0, 0.0  # Fallback coordinates
+                
+                if not silent:
+                    print(f"      {status} {location_name:25s} → ({lat:7.3f}, {lng:7.3f}) [{data['total_posts']} posts]")
+                
+                # Save to database with SECTOR column
+                cursor.execute('''
+                    INSERT OR REPLACE INTO aggregated_emotions 
+                    (location_name, location_type, joy_count, anger_count, 
+                     sadness_count, hope_count, calmness_count, total_posts,
+                     dominant_emotion, avg_emotion_score, latitude, longitude, 
+                     sector, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''', (
+                    location_name,
+                    zoom_level,
+                    data['joy_count'],
+                    data['anger_count'],
+                    data['sadness_count'],
+                    data['hope_count'],
+                    data['calmness_count'],
+                    data['total_posts'],
+                    data['dominant_emotion'],
+                    data['avg_emotion_score'],
+                    lat,
+                    lng,
+                    sector  # ← SECTOR COLUMN!
+                ))
+                
+            except Exception as e:
+                if not silent:
+                    print(f"      ❌ Error saving {location_name}: {e}")
                 failed += 1
-                status = "✗"
-                lat, lng = 0.0, 0.0  # Fallback coordinates
-            
-            if not silent:
-                print(f"   {status} {location_name:30s} → ({lat:8.4f}, {lng:8.4f})")
-            
-            # ✅ FIX: Use INSERT OR REPLACE to avoid duplicates
-            # This will update if (location_name, location_type) already exists
-            cursor.execute('''
-                INSERT OR REPLACE INTO aggregated_emotions 
-                (location_name, location_type, joy_count, anger_count, 
-                 sadness_count, hope_count, calmness_count, total_posts,
-                 dominant_emotion, avg_emotion_score, latitude, longitude, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ''', (
-                location_name,
-                zoom_level,
-                data['joy_count'],
-                data['anger_count'],
-                data['sadness_count'],
-                data['hope_count'],
-                data['calmness_count'],
-                data['total_posts'],
-                data['dominant_emotion'],
-                data['avg_emotion_score'],
-                lat,
-                lng
-            ))
-            
-        except Exception as e:
-            if not silent:
-                print(f"   ❌ Error saving {location_name}: {e}")
-            failed += 1
-            continue
+                continue
     
     conn.commit()
     conn.close()
@@ -259,7 +276,7 @@ def save_aggregated_data(zoom_level: str, aggregated: dict, silent: bool = False
 
 def process_all_zoom_levels(silent: bool = False, clear_before: bool = True):
     """
-    Process aggregation for all zoom levels.
+    Process aggregation for all zoom levels WITH SECTOR SUPPORT.
     
     Args:
         silent: If True, minimal output (for background tasks)
@@ -268,10 +285,10 @@ def process_all_zoom_levels(silent: bool = False, clear_before: bool = True):
     
     if not silent:
         print("\n" + "="*60)
-        print("DATA AGGREGATOR")
+        print("MULTI-SECTOR DATA AGGREGATOR")
         print("="*60)
     
-    # ✅ OPTION 1: Clear all old data before processing (clean slate)
+    # Clear all old data before processing (clean slate)
     if clear_before:
         if not silent:
             print("\n🗑️  Clearing old aggregated data...")
@@ -282,44 +299,52 @@ def process_all_zoom_levels(silent: bool = False, clear_before: bool = True):
     
     for zoom in zoom_levels:
         if not silent:
-            print(f"\nProcessing {zoom}...")
+            print(f"\n{'='*60}")
+            print(f"Processing {zoom.upper()}...")
+            print(f"{'='*60}")
         
-        # ✅ OPTION 2: Clear only this zoom level's data (if not clearing all)
-        # Uncomment this if you want per-zoom-level clearing instead:
-        # if not clear_before:
-        #     clear_old_aggregated_data(zoom)
-        
-        # Aggregate data
+        # Aggregate data (now returns data keyed by (location, sector))
         aggregated = aggregate_by_location(zoom)
         
         if not aggregated:
             if not silent:
-                print(f"  No data for {zoom}")
+                print(f"  ⚠️  No data for {zoom}")
             continue
         
         if not silent:
-            print(f"  Found {len(aggregated)} locations")
+            print(f"  📊 Found {len(aggregated)} location+sector combinations")
+            
+            # Show breakdown by sector
+            sector_counts = defaultdict(int)
+            for (location, sector), data in aggregated.items():
+                sector_counts[sector] += 1
+            
+            for sector, count in sorted(sector_counts.items()):
+                icons = {'finance': '💰', 'health': '🏥', 'technology': '💻', 'sports': '⚽', 'general': '🌐'}
+                print(f"     {icons.get(sector, '📌')} {sector.capitalize()}: {count} locations")
         
         # Save to database (with geocoding)
         save_aggregated_data(zoom, aggregated, silent)
         
         if not silent:
-            print(f"  ✓ {zoom.capitalize()} complete")
+            print(f"\n  ✅ {zoom.capitalize()} complete")
     
     # Final statistics
     elapsed = (datetime.now() - start_time).total_seconds()
     
     if not silent:
-        print(f"\n✓ Aggregation complete in {elapsed:.1f}s")
-        print("="*60)
+        print(f"\n{'='*60}")
+        print(f"✅ MULTI-SECTOR AGGREGATION COMPLETE")
+        print(f"{'='*60}")
+        print(f"   Time taken: {elapsed:.1f}s")
+        print(f"   All sectors processed: Finance, Health, Technology, Sports")
+        print(f"{'='*60}\n")
     
     return True
 
 if __name__ == '__main__':
     try:
-        # You can control the behavior here:
-        # clear_before=True  → Deletes ALL old data before processing (RECOMMENDED)
-        # clear_before=False → Uses INSERT OR REPLACE (updates existing rows)
+        # Clear old data and create new sector-aware aggregations
         process_all_zoom_levels(clear_before=True)
     except KeyboardInterrupt:
         print("\n\n⚠️  Process interrupted by user")

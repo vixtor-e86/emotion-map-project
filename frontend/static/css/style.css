@@ -510,3 +510,205 @@ body {
         display: none;
     }
 }
+/* ============================================
+   SECTOR TABS STYLING
+   Add this to your existing style.css file
+   ============================================ */
+
+/* Sector Tabs Container */
+.sector-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 0.5rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Individual Sector Tab */
+.sector-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.sector-tab::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, transparent, rgba(255, 255, 255, 0.1));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.sector-tab:hover::before {
+    opacity: 1;
+}
+
+/* Sector Tab Icons */
+.sector-icon {
+    font-size: 1.25rem;
+    transition: transform 0.3s ease;
+}
+
+.sector-tab:hover .sector-icon {
+    transform: scale(1.1);
+}
+
+/* Active Sector Tab */
+.sector-tab.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Sector-specific active colors */
+.sector-tab.active[data-sector="finance"] {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.1));
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.sector-tab.active[data-sector="health"] {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(59, 130, 246, 0.1));
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.sector-tab.active[data-sector="technology"] {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(139, 92, 246, 0.1));
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.sector-tab.active[data-sector="sports"] {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(245, 158, 11, 0.1));
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* Sector Tab Hover States */
+.sector-tab:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    transform: translateY(-2px);
+}
+
+.sector-tab:active {
+    transform: translateY(0);
+}
+
+/* Sector Name */
+.sector-name {
+    font-family: 'Inter', sans-serif;
+    letter-spacing: 0.3px;
+}
+
+/* Drawer Sector Badge */
+.drawer-sector-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Badge colors per sector */
+.drawer-sector-badge[data-sector="finance"] {
+    background: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.3);
+    color: #10b981;
+}
+
+.drawer-sector-badge[data-sector="health"] {
+    background: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #3b82f6;
+}
+
+.drawer-sector-badge[data-sector="technology"] {
+    background: rgba(139, 92, 246, 0.1);
+    border-color: rgba(139, 92, 246, 0.3);
+    color: #8b5cf6;
+}
+
+.drawer-sector-badge[data-sector="sports"] {
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.3);
+    color: #f59e0b;
+}
+
+/* Responsive Design for Sector Tabs */
+@media (max-width: 1200px) {
+    .sector-tabs {
+        gap: 0.25rem;
+        padding: 0.4rem;
+    }
+    
+    .sector-tab {
+        padding: 0.6rem 1rem;
+        font-size: 0.85rem;
+    }
+    
+    .sector-icon {
+        font-size: 1.1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .sector-tabs {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .sector-tab {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.8rem;
+    }
+    
+    .sector-name {
+        display: none; /* Hide text on mobile, show only icons */
+    }
+    
+    .sector-icon {
+        font-size: 1.4rem;
+    }
+}
+
+/* Loading animation for sector switch */
+.sector-tab.loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.sector-tab.loading .sector-icon {
+    animation: rotate 1s linear infinite;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Sector description in hint text */
+#sectorDescription {
+    font-weight: 600;
+    color: var(--text-primary);
+}

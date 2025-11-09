@@ -1,18 +1,52 @@
 /* ============================================
-   EMOTION MAP - API INTEGRATION
-   Connects frontend to Flask backend
+   MULTI-SECTOR API INTEGRATION
+   Handles API calls with sector filtering
    ============================================ */
 
 // API Configuration
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = '/api';
 
-// Emotion Configuration
-const EMOTION_CONFIG = {
-    joy: { color: '#10b981', emoji: '🟢', label: 'Strong Bullish', sentiment: 'bullish', score: 85 },
-    anger: { color: '#ef4444', emoji: '🔴', label: 'Strong Bearish', sentiment: 'bearish', score: 25 },
-    sadness: { color: '#f87171', emoji: '📉', label: 'Cautious', sentiment: 'bearish', score: 35 },
-    hope: { color: '#34d399', emoji: '📈', label: 'Optimistic', sentiment: 'bullish', score: 75 },
-    calmness: { color: '#94a3b8', emoji: '⚪', label: 'Neutral', sentiment: 'neutral', score: 50 }
+// Current active sector (global state)
+window.currentSector = 'finance';
+
+// Sector-specific emotion configurations
+const SECTOR_EMOTION_CONFIGS = {
+    finance: {
+        joy: { color: '#10b981', emoji: '🟢', label: 'Strong Bullish' },
+        hope: { color: '#34d399', emoji: '📈', label: 'Optimistic' },
+        calmness: { color: '#94a3b8', emoji: '⚪', label: 'Neutral' },
+        sadness: { color: '#f87171', emoji: '📉', label: 'Cautious' },
+        anger: { color: '#ef4444', emoji: '🔴', label: 'Strong Bearish' }
+    },
+    health: {
+        joy: { color: '#10b981', emoji: '💚', label: 'Healthy' },
+        hope: { color: '#34d399', emoji: '🌱', label: 'Recovering' },
+        calmness: { color: '#94a3b8', emoji: '😌', label: 'Stable' },
+        sadness: { color: '#f87171', emoji: '😟', label: 'Concerned' },
+        anger: { color: '#ef4444', emoji: '😤', label: 'Critical' }
+    },
+    technology: {
+        joy: { color: '#8b5cf6', emoji: '🚀', label: 'Innovative' },
+        hope: { color: '#a78bfa', emoji: '💡', label: 'Optimistic' },
+        calmness: { color: '#94a3b8', emoji: '🧘', label: 'Stable' },
+        sadness: { color: '#f87171', emoji: '😔', label: 'Disappointed' },
+        anger: { color: '#ef4444', emoji: '🐛', label: 'Frustrated' }
+    },
+    sports: {
+        joy: { color: '#f59e0b', emoji: '🎉', label: 'Excited' },
+        hope: { color: '#fbbf24', emoji: '🔥', label: 'Hopeful' },
+        calmness: { color: '#94a3b8', emoji: '😐', label: 'Neutral' },
+        sadness: { color: '#f87171', emoji: '😢', label: 'Disappointed' },
+        anger: { color: '#ef4444', emoji: '😡', label: 'Frustrated' }
+    }
+};
+
+// Sector metadata
+const SECTORS = {
+    finance: { name: 'Finance', icon: '💰', description: 'Market Sentiment & Economic Trends' },
+    health: { name: 'Health', icon: '🏥', description: 'Healthcare & Wellness Insights' },
+    technology: { name: 'Technology', icon: '💻', description: 'Tech Innovation & Digital Trends' },
+    sports: { name: 'Sports', icon: '⚽', description: 'Sports News & Fan Sentiment' }
 };
 
 /* ============================================
@@ -20,9 +54,34 @@ const EMOTION_CONFIG = {
    ============================================ */
 
 /**
- * API INTEGRATION POINT 1: Health Check
- * Checks if backend is running
- * Endpoint: GET /api/health
+ * Get emotion config for current sector
+ */
+function getEmotionConfig(emotion) {
+    const sector = window.currentSector || 'finance';
+    return SECTOR_EMOTION_CONFIGS[sector][emotion] || {
+        color: '#94a3b8',
+        emoji: '⚪',
+        label: emotion
+    };
+}
+
+/**
+ * Get all emotion configs for current sector
+ */
+function getAllEmotionConfigs() {
+    const sector = window.currentSector || 'finance';
+    return SECTOR_EMOTION_CONFIGS[sector];
+}
+
+/**
+ * Get sector info
+ */
+function getSectorInfo(sector) {
+    return SECTORS[sector] || SECTORS.finance;
+}
+
+/**
+ * Health check
  */
 async function checkHealth() {
     try {
@@ -37,152 +96,91 @@ async function checkHealth() {
 }
 
 /**
- * API INTEGRATION POINT 2: Fetch Global Statistics
- * Gets overall emotion percentages worldwide
- * Endpoint: GET /api/stats
- * 
- * Expected Response Format:
- * {
- *   joy: 64,
- *   anger: 21,
- *   sadness: 10,
- *   hope: 3,
- *   calmness: 2
- * }
+ * Fetch available sectors
  */
-async function fetchGlobalStats() {
+async function fetchSectors() {
     try {
-        const response = await fetch(`${API_BASE}/stats`);
+        const response = await fetch(`${API_BASE}/sectors`);
         const data = await response.json();
-        console.log('📊 Global stats from API:', data);
+        console.log('📂 Available sectors:', data);
         return data;
     } catch (error) {
-        console.warn('⚠️ Using mock global stats (backend not connected)');
-        // Mock data fallback
+        console.error('❌ Error fetching sectors:', error);
+        return Object.keys(SECTORS).map(id => ({
+            id,
+            ...SECTORS[id],
+            post_count: 0
+        }));
+    }
+}
+
+/**
+ * Fetch global statistics for current sector
+ */
+async function fetchGlobalStats(sector = null) {
+    try {
+        const activeSector = sector || window.currentSector;
+        const response = await fetch(`${API_BASE}/stats?sector=${activeSector}`);
+        const data = await response.json();
+        console.log(`📊 Stats for ${activeSector}:`, data);
+        return data;
+    } catch (error) {
+        console.warn('⚠️ Using fallback stats');
         return {
-            joy: 64,
-            anger: 21,
-            sadness: 10,
-            hope: 3,
-            calmness: 2
+            joy: 20, anger: 20, sadness: 20,
+            hope: 20, calmness: 20, total_posts: 0,
+            sector: sector || window.currentSector
         };
     }
 }
 
 /**
- * API INTEGRATION POINT 3: Fetch Map Data
- * Gets emotion data for all locations
- * Endpoint: GET /api/map-data/:zoom_level
- * 
- * Expected Response Format:
- * [
- *   {
- *     lat: 6.5244,
- *     lng: 3.3792,
- *     country: "Nigeria",
- *     region: "Lagos",
- *     emotion: "anger",
- *     intensity: 0.65,    // 0.0 to 1.0
- *     posts: 120
- *   },
- *   ...
- * ]
+ * Fetch map data for current sector
  */
-async function fetchMapData(zoomLevel = 'country') {
+async function fetchMapData(zoomLevel = 'country', sector = null) {
     try {
-        const response = await fetch(`${API_BASE}/map-data/${zoomLevel}`);
+        const activeSector = sector || window.currentSector;
+        const response = await fetch(`${API_BASE}/map-data/${zoomLevel}?sector=${activeSector}`);
         const data = await response.json();
-        console.log('🗺️ Map data from API:', data);
+        console.log(`🗺️ Map data for ${activeSector} (${zoomLevel}):`, data.length, 'points');
         return data;
     } catch (error) {
-        console.warn('⚠️ Using mock map data (backend not connected)');
-        // Mock data fallback
-        return [
-            { lat: 9.0820, lng: 8.6753, country: 'Nigeria', emotion: 'anger', intensity: 0.85, posts: 120 },
-            { lat: 40.7128, lng: -74.0060, country: 'USA', emotion: 'joy', intensity: 0.80, posts: 340 },
-            { lat: 48.8566, lng: 2.3522, country: 'France', emotion: 'hope', intensity: 0.60, posts: 180 },
-            { lat: -23.5505, lng: -46.6333, country: 'Brazil', emotion: 'joy', intensity: 0.90, posts: 210 },
-            { lat: 51.5074, lng: -0.1278, country: 'UK', emotion: 'calmness', intensity: 0.55, posts: 190 },
-            { lat: 35.6762, lng: 139.6503, country: 'Japan', emotion: 'calmness', intensity: 0.70, posts: 150 }
-        ];
+        console.warn('⚠️ Using fallback map data');
+        return [];
     }
 }
 
 /**
- * API INTEGRATION POINT 4: Fetch Location Details
- * Gets detailed emotion breakdown for a specific location
- * Endpoint: GET /api/location/:location_name
- * 
- * Expected Response Format:
- * {
- *   country: "Nigeria",
- *   region: "Lagos",
- *   emotions: {
- *     anger: 65,
- *     joy: 20,
- *     sadness: 10,
- *     hope: 3,
- *     calmness: 2
- *   },
- *   keywords: ["protests", "economy", "fuel"],
- *   posts: [
- *     "The situation is difficult...",
- *     "We need change..."
- *   ]
- * }
+ * Fetch location details
  */
-async function fetchLocationDetails(location) {
+async function fetchLocationDetails(location, sector = null) {
     try {
-        const response = await fetch(`${API_BASE}/location/${encodeURIComponent(location)}`);
+        const activeSector = sector || window.currentSector;
+        const response = await fetch(`${API_BASE}/location/${encodeURIComponent(location)}?sector=${activeSector}`);
         const data = await response.json();
-        console.log('📍 Location details from API:', data);
+        console.log('📍 Location details:', data);
         return data;
     } catch (error) {
-        console.warn('⚠️ Using mock region data (backend not connected)');
-        // Mock data fallback
-        const mockData = {
-            'Nigeria': {
-                country: 'Nigeria',
-                region: 'Lagos',
-                emotions: { anger: 65, joy: 20, sadness: 10, hope: 3, calmness: 2 },
-                keywords: ['protests', 'economy', 'fuel prices'],
-                posts: ['The situation is getting worse', 'We need change now']
-            },
-            'USA': {
-                country: 'USA',
-                region: 'New York',
-                emotions: { joy: 70, hope: 15, calmness: 10, anger: 3, sadness: 2 },
-                keywords: ['celebration', 'tech', 'innovation'],
-                posts: ['Best day ever!', 'Amazing vibes today']
-            }
+        console.error('❌ Error fetching location details:', error);
+        return {
+            country: location,
+            region: location,
+            emotions: { joy: 20, anger: 20, sadness: 20, hope: 20, calmness: 20 },
+            keywords: ['no', 'data'],
+            posts: ['No data available'],
+            sector: sector || window.currentSector
         };
-        return mockData[location] || mockData['Nigeria'];
     }
 }
 
 /**
- * API INTEGRATION POINT 5: Search Emotions
- * Search for locations/topics with optional emotion filter
- * Endpoint: GET /api/search?q=query&emotion=filter
- * 
- * Parameters:
- * - query: Search term (location, topic, keyword)
- * - emotionFilter: Optional emotion filter (joy, anger, etc.)
- * 
- * Expected Response Format:
- * [
- *   {
- *     country: "Nigeria",
- *     emotion: "anger",
- *     posts: 45,
- *     ...
- *   },
- *   ...
- * ]
+ * Search with sector filter
  */
-async function searchEmotions(query, emotionFilter = null) {
+async function searchEmotions(query, emotionFilter = null, sector = null) {
     try {
-        let url = `${API_BASE}/search?q=${encodeURIComponent(query)}`;
+        const activeSector = sector || window.currentSector;
+        let url = `${API_BASE}/search?q=${encodeURIComponent(query)}&sector=${activeSector}`;
+        
         if (emotionFilter) {
             url += `&emotion=${emotionFilter}`;
         }
@@ -193,26 +191,17 @@ async function searchEmotions(query, emotionFilter = null) {
         return data;
     } catch (error) {
         console.error('❌ Search failed:', error);
-        return [];
+        return { results: [], count: 0 };
     }
 }
 
 /**
- * API INTEGRATION POINT 6: Fetch Emotion Trends
- * Gets emotion trends over time
- * Endpoint: GET /api/trends?hours=24
- * 
- * Expected Response Format:
- * {
- *   timestamps: ["2025-10-22 10:00", "2025-10-22 11:00", ...],
- *   joy: [64, 62, 65, ...],
- *   anger: [21, 23, 20, ...],
- *   ...
- * }
+ * Fetch trends
  */
-async function fetchTrends(hours = 24) {
+async function fetchTrends(hours = 24, sector = null) {
     try {
-        const response = await fetch(`${API_BASE}/trends?hours=${hours}`);
+        const activeSector = sector || window.currentSector;
+        const response = await fetch(`${API_BASE}/trends?hours=${hours}&sector=${activeSector}`);
         const data = await response.json();
         console.log('📈 Trends data:', data);
         return data;
@@ -223,30 +212,25 @@ async function fetchTrends(hours = 24) {
 }
 
 /**
- * API INTEGRATION POINT 7: Refresh Data
- * Triggers backend to refresh emotion data
- * Note: Backend refreshes automatically every 60 minutes
+ * Refresh all data for current sector
  */
-async function refreshData() {
-    console.log('🔄 Refreshing all data...');
+async function refreshData(sector = null) {
+    console.log('🔄 Refreshing data...');
     
     try {
-        // Fetch all data in parallel
+        const activeSector = sector || window.currentSector;
+        
         const [stats, mapData] = await Promise.all([
-            fetchGlobalStats(),
-            fetchMapData()
+            fetchGlobalStats(activeSector),
+            fetchMapData('country', activeSector)
         ]);
         
-        return { stats, mapData };
+        return { stats, mapData, sector: activeSector };
     } catch (error) {
         console.error('❌ Refresh failed:', error);
         return null;
     }
 }
-
-/* ============================================
-   UTILITY FUNCTIONS
-   ============================================ */
 
 /**
  * Filter map data by active emotion filters
@@ -258,22 +242,13 @@ function filterMapData(data, activeFilters) {
     return data.filter(point => activeFilters.includes(point.emotion));
 }
 
-/**
- * Handle API errors gracefully
- */
-function handleApiError(error, context) {
-    console.error(`API Error in ${context}:`, error);
-    // You can add user-friendly error messages here
-    return null;
-}
-
 /* ============================================
-   EXPORT FOR USE IN OTHER FILES
+   EXPORT
    ============================================ */
 
-// Make functions available globally
 window.EmotionMapAPI = {
     checkHealth,
+    fetchSectors,
     fetchGlobalStats,
     fetchMapData,
     fetchLocationDetails,
@@ -281,6 +256,11 @@ window.EmotionMapAPI = {
     fetchTrends,
     refreshData,
     filterMapData,
-    EMOTION_CONFIG,
-    API_BASE
+    getEmotionConfig,
+    getAllEmotionConfigs,
+    getSectorInfo,
+    API_BASE,
+    SECTORS
 };
+
+console.log('✅ Multi-Sector API module loaded');

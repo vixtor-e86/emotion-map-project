@@ -1,8 +1,10 @@
 """
-reddit_collector.py (FINANCE EDITION)
---------------------------------------
-Collects from FINANCE-SPECIFIC subreddits + filters general subs for finance content.
-Hybrid approach: Keep general subs but prioritize finance discussions.
+reddit_collector.py (MULTI-SECTOR EDITION)
+-------------------------------------------
+Collects posts from Reddit for ALL 4 SECTORS:
+- Finance, Health, Technology, Sports
+
+Each post is automatically tagged with its sector.
 """
 
 import praw
@@ -17,21 +19,16 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.db_manager import db
 from config import Config
-from processing.finance_config import (
-    FINANCE_SUBREDDITS,
-    is_finance_related,
-    extract_tickers
+from processing.sector_config import (
+    SUBREDDITS,
+    detect_sector,
+    extract_tickers,
+    get_sector_info
 )
-
-# General subreddits (we'll filter for finance content)
-GENERAL_SUBREDDITS = [
-    "worldnews", "news", "technology", "business",
-    "usa", "unitedkingdom", "canada", "europe"
-]
 
 # Map subreddit to country
 SUBREDDIT_COUNTRY_MAP = {
-    # Finance-specific
+    # Finance
     "wallstreetbets": "United States",
     "stocks": "International",
     "investing": "International",
@@ -39,23 +36,28 @@ SUBREDDIT_COUNTRY_MAP = {
     "CryptoCurrency": "International",
     "Bitcoin": "International",
     "ethereum": "International",
-    "Daytrading": "International",
-    "swingtrading": "International",
-    "options": "United States",
-    "personalfinance": "United States",
-    "CanadianInvestor": "Canada",
-    "UKInvesting": "United Kingdom",
-    "IndiaInvestments": "India",
     
-    # General
-    "worldnews": "International",
-    "news": "International",
+    # Health
+    "Health": "International",
+    "fitness": "International",
+    "nutrition": "International",
+    "mentalhealth": "International",
+    "medical": "International",
+    
+    # Technology
     "technology": "International",
-    "business": "International",
-    "usa": "United States",
-    "unitedkingdom": "United Kingdom",
-    "canada": "Canada",
-    "europe": "International"
+    "tech": "International",
+    "programming": "International",
+    "MachineLearning": "International",
+    "cybersecurity": "International",
+    
+    # Sports
+    "sports": "International",
+    "soccer": "International",
+    "football": "International",
+    "nba": "United States",
+    "nfl": "United States",
+    "PremierLeague": "United Kingdom",
 }
 
 def create_reddit_instance():
@@ -67,119 +69,68 @@ def create_reddit_instance():
     )
     return reddit
 
-def collect_reddit_data(limit_per_sub=50, retries=2):
+def collect_sector_reddit_data(sector: str, reddit, limit_per_sub=30, retries=2):
     """
-    Collect finance data from Reddit with filtering.
-    Returns: Dictionary with collection statistics
+    Collect Reddit data for a specific sector.
+    
+    Args:
+        sector: Sector name ('finance', 'health', 'technology', 'sports')
+        reddit: Reddit API instance
+        limit_per_sub: Posts per subreddit
+        retries: Number of retries
+    
+    Returns:
+        dict: Collection statistics
     """
-    reddit = create_reddit_instance()
+    if sector not in SUBREDDITS:
+        print(f"❌ Unknown sector: {sector}")
+        return None
+    
+    sector_info = get_sector_info(sector)
+    subreddits = SUBREDDITS[sector]
+    
     total_posts = 0
     duplicate_posts = 0
-    finance_posts = 0
-    filtered_posts = 0
     skipped_subreddits = []
     
-    print(f"\n📱 Starting FINANCE Reddit collection...\n")
-    
-    # ===== PART 1: Finance-Specific Subreddits (Always save) =====
-    print("=" * 60)
-    print("🎯 FINANCE-SPECIFIC SUBREDDITS")
+    print(f"\n{sector_info['icon']} {sector_info['name'].upper()} SUBREDDITS")
     print("=" * 60)
     
-    for sub in FINANCE_SUBREDDITS:
+    for sub in subreddits:
         attempt = 0
         while attempt <= retries:
             try:
                 subreddit = reddit.subreddit(sub)
-                print(f"📡 Collecting from r/{sub}...")
+                print(f"📡 r/{sub}...", end=' ')
                 
                 sub_posts = 0
                 sub_duplicates = 0
                 
                 for post in subreddit.hot(limit=limit_per_sub):
                     try:
-                        country = SUBREDDIT_COUNTRY_MAP.get(sub, "International")
-                        
-                        # Extract tickers
-                        text = post.title
-                        tickers = extract_tickers(text)
-                        ticker_text = f" [{', '.join(tickers)}]" if tickers else ""
-                        
-                        # Save to database
-                        post_id = db.insert_raw_post(
-                            text=text + ticker_text,
-                            source=f"Finance-Reddit-r/{sub}",
-                            country=country,
-                            emotion=None,
-                            emotion_score=None
-                        )
-                        
-                        if post_id is None:
-                            duplicate_posts += 1
-                            sub_duplicates += 1
-                        else:
-                            total_posts += 1
-                            finance_posts += 1
-                            sub_posts += 1
-                        
-                    except Exception as e:
-                        print(f"❌ Error saving post from r/{sub}: {e}")
-                        continue
-                
-                print(f"✅ r/{sub}: {sub_posts} new, {sub_duplicates} duplicates")
-                time.sleep(random.uniform(2, 4))
-                break
-                
-            except prawcore.exceptions.Forbidden:
-                print(f"⚠️ Skipping r/{sub}: Access forbidden (403)")
-                skipped_subreddits.append(f"{sub} - Forbidden (403)")
-                break
-                
-            except Exception as e:
-                attempt += 1
-                print(f"❌ Error fetching r/{sub} (attempt {attempt}): {e}")
-                if attempt > retries:
-                    skipped_subreddits.append(f"{sub} - Failed after retries")
-                    break
-                else:
-                    time.sleep(3)
-    
-    # ===== PART 2: General Subreddits (Filter for finance) =====
-    print("\n" + "=" * 60)
-    print("🔍 GENERAL SUBREDDITS (Finance Filter)")
-    print("=" * 60)
-    
-    for sub in GENERAL_SUBREDDITS:
-        attempt = 0
-        while attempt <= retries:
-            try:
-                subreddit = reddit.subreddit(sub)
-                print(f"📡 Collecting from r/{sub}...")
-                
-                sub_posts = 0
-                sub_duplicates = 0
-                sub_filtered = 0
-                
-                for post in subreddit.hot(limit=limit_per_sub):
-                    try:
                         text = post.title
                         
-                        # FILTER: Only save if finance-related
-                        if not is_finance_related(text):
-                            sub_filtered += 1
-                            filtered_posts += 1
+                        # Verify sector (skip if wrong sector)
+                        detected_sector = detect_sector(text)
+                        if detected_sector != sector and detected_sector != 'general':
                             continue
                         
                         country = SUBREDDIT_COUNTRY_MAP.get(sub, "International")
-                        tickers = extract_tickers(text)
-                        ticker_text = f" [{', '.join(tickers)}]" if tickers else ""
                         
+                        # Extract tickers if finance
+                        if sector == 'finance':
+                            tickers = extract_tickers(text)
+                            if tickers:
+                                text = text + f" [{', '.join(tickers)}]"
+                        
+                        # Save to database with SECTOR tag
                         post_id = db.insert_raw_post(
-                            text=text + ticker_text,
-                            source=f"General-Reddit-r/{sub}",
+                            text=text,
+                            source=f"{sector.capitalize()}-Reddit-r/{sub}",
                             country=country,
                             emotion=None,
-                            emotion_score=None
+                            emotion_score=None,
+                            sector=sector  # ← SECTOR TAG!
                         )
                         
                         if post_id is None:
@@ -187,75 +138,105 @@ def collect_reddit_data(limit_per_sub=50, retries=2):
                             sub_duplicates += 1
                         else:
                             total_posts += 1
-                            finance_posts += 1
                             sub_posts += 1
                         
                     except Exception as e:
-                        print(f"❌ Error saving post from r/{sub}: {e}")
                         continue
                 
-                print(f"✅ r/{sub}: {sub_posts} new, {sub_duplicates} dup, {sub_filtered} filtered")
+                print(f"✅ {sub_posts} new, {sub_duplicates} dup")
                 time.sleep(random.uniform(2, 4))
                 break
                 
             except prawcore.exceptions.Forbidden:
-                print(f"⚠️ Skipping r/{sub}: Access forbidden (403)")
-                skipped_subreddits.append(f"{sub} - Forbidden (403)")
+                print(f"⚠️ Access forbidden (403)")
+                skipped_subreddits.append(f"{sub} - Forbidden")
                 break
                 
             except Exception as e:
                 attempt += 1
-                print(f"❌ Error fetching r/{sub} (attempt {attempt}): {e}")
                 if attempt > retries:
-                    skipped_subreddits.append(f"{sub} - Failed after retries")
+                    print(f"❌ Failed after retries")
+                    skipped_subreddits.append(f"{sub} - Failed")
                     break
                 else:
                     time.sleep(3)
     
-    # Log skipped subreddits
-    if skipped_subreddits:
-        with open("skipped_subreddits.log", "w") as log_file:
-            log_file.write("\n".join(skipped_subreddits))
-        print(f"\n⚠️ Logged {len(skipped_subreddits)} skipped subreddits")
+    return {
+        'sector': sector,
+        'unique_posts': total_posts,
+        'duplicates': duplicate_posts,
+        'skipped': len(skipped_subreddits)
+    }
+
+def collect_all_sectors_reddit(limit_per_sub=30):
+    """
+    Collect Reddit data from ALL 4 SECTORS.
     
-    # Calculate statistics
-    total_processed = total_posts + duplicate_posts + filtered_posts
-    duplicate_rate = round((duplicate_posts / total_processed * 100), 1) if total_processed > 0 else 0
-    finance_rate = round((finance_posts / total_posts * 100), 1) if total_posts > 0 else 0
+    Args:
+        limit_per_sub: Posts per subreddit
     
-    print(f"\n" + "="*60)
-    print(f"✅ Finance Reddit Collection Complete!")
-    print(f"="*60)
-    print(f"📊 Finance Posts Saved:   {finance_posts}")
-    print(f"📈 Total Unique Posts:    {total_posts}")
-    print(f"🔄 Duplicates Skipped:    {duplicate_posts}")
-    print(f"🚫 Filtered Out:          {filtered_posts}")
-    print(f"📉 Duplicate Rate:        {duplicate_rate}%")
-    print(f"🎯 Finance Rate:          {finance_rate}%")
-    print(f"⚠️  Skipped Subreddits:   {len(skipped_subreddits)}")
-    print(f"="*60 + "\n")
+    Returns:
+        dict: Statistics for all sectors
+    """
+    print("\n" + "="*60)
+    print("📱 MULTI-SECTOR REDDIT DATA COLLECTION")
+    print("="*60)
+    
+    # Create Reddit instance once
+    reddit = create_reddit_instance()
+    
+    all_stats = {}
+    total_unique = 0
+    total_duplicates = 0
+    total_skipped = 0
+    
+    # Collect from each sector
+    for sector in ['finance', 'health', 'technology', 'sports']:
+        stats = collect_sector_reddit_data(sector, reddit, limit_per_sub)
+        if stats:
+            all_stats[sector] = stats
+            total_unique += stats['unique_posts']
+            total_duplicates += stats['duplicates']
+            total_skipped += stats['skipped']
+    
+    # Final summary
+    total_processed = total_unique + total_duplicates
+    duplicate_rate = round((total_duplicates / total_processed * 100), 1) if total_processed > 0 else 0
+    
+    print("\n" + "="*60)
+    print("✅ MULTI-SECTOR REDDIT COLLECTION COMPLETE!")
+    print("="*60)
+    
+    print("\n📊 Summary by Sector:")
+    for sector, stats in all_stats.items():
+        sector_info = get_sector_info(sector)
+        print(f"   {sector_info['icon']} {sector_info['name']:12s}: {stats['unique_posts']:3d} posts")
+    
+    print(f"\n📈 Overall Statistics:")
+    print(f"   Total Unique Posts:   {total_unique}")
+    print(f"   Total Duplicates:     {total_duplicates}")
+    print(f"   Total Processed:      {total_processed}")
+    print(f"   Duplicate Rate:       {duplicate_rate}%")
+    print(f"   Skipped Subreddits:   {total_skipped}")
+    print("="*60 + "\n")
     
     return {
-        'unique_posts': total_posts,
-        'finance_posts': finance_posts,
-        'duplicates': duplicate_posts,
-        'filtered': filtered_posts,
+        'by_sector': all_stats,
+        'total_unique': total_unique,
+        'total_duplicates': total_duplicates,
         'total_processed': total_processed,
         'duplicate_rate': duplicate_rate,
-        'finance_rate': finance_rate,
-        'skipped_subreddits': len(skipped_subreddits)
+        'total_skipped': total_skipped
     }
 
 # Test the collector
 if __name__ == "__main__":
-    print("🚀 Starting Finance Reddit Collector Test...")
-    stats = collect_reddit_data(limit_per_sub=20)
+    print("🚀 Starting Multi-Sector Reddit Collector...")
+    stats = collect_all_sectors_reddit(limit_per_sub=20)
     
-    print("\n📊 Final Statistics:")
-    print(f"   Finance Posts:    {stats['finance_posts']}")
-    print(f"   Total Unique:     {stats['unique_posts']}")
-    print(f"   Duplicates:       {stats['duplicates']}")
-    print(f"   Filtered:         {stats['filtered']}")
-    print(f"   Finance Rate:     {stats['finance_rate']}%")
-    print(f"   Skipped Subs:     {stats['skipped_subreddits']}")
-    print("\n✅ Test Complete!")
+    print("\n📊 Final Report:")
+    print(f"   Sectors Collected: {len(stats['by_sector'])}")
+    print(f"   Total New Posts:   {stats['total_unique']}")
+    print(f"   Duplicate Rate:    {stats['duplicate_rate']}%")
+    print(f"   Skipped Subs:      {stats['total_skipped']}")
+    print("\n✅ Collection Complete!")
